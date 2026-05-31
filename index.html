@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sumo Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0c0a;
+      --surface: #181410;
+      --surface2: #211d18;
+      --border: #2e2820;
+      --accent: #c8922a;
+      --accent2: #8b5e1a;
+      --text: #e8e0d0;
+      --muted: #7a7060;
+      --danger: #c84a2a;
+
+      --c1: #c8922a;
+      --c2: #4a9eca;
+      --c3: #ca4a7e;
+      --c4: #4aca8a;
+      --c5: #9a6aca;
+      --c6: #ca8a4a;
+      --c7: #4acaca;
+      --c8: #ca4a4a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ─── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: baseline;
+      gap: 20px;
+    }
+    header h1 {
+      font-family: 'Shippori Mincho', serif;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+    }
+    header span {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ─── Layout ─── */
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: auto 1fr;
+      height: calc(100vh - 69px);
+    }
+
+    /* ─── Sidebar ─── */
+    aside {
+      grid-row: 1 / 3;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* Toggle */
+    .toggle-group {
+      display: flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .toggle-group button {
+      flex: 1;
+      padding: 8px 0;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle-group button.active {
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 500;
+    }
+
+    /* Search */
+    .search-wrap {
+      position: relative;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-wrap input:focus { border-color: var(--accent); }
+    .search-wrap input::placeholder { color: var(--muted); }
+
+    .dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--surface2);
+      border: 1px solid var(--accent2);
+      border-radius: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+    }
+    .dropdown.open { display: block; }
+    .dropdown-item {
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+      font-size: 12px;
+    }
+    .dropdown-item:hover { background: var(--surface); }
+    .dropdown-item .rank-badge {
+      font-size: 10px;
+      color: var(--muted);
+      float: right;
+    }
+    .dropdown::-webkit-scrollbar { width: 4px; }
+    .dropdown::-webkit-scrollbar-track { background: var(--surface); }
+    .dropdown::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Active rikishi list */
+    .rikishi-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .rikishi-list::-webkit-scrollbar { width: 4px; }
+    .rikishi-list::-webkit-scrollbar-track { background: transparent; }
+    .rikishi-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .rikishi-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--surface2);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      border-left: 3px solid var(--color, var(--accent));
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .rikishi-chip .name { flex: 1; font-size: 12px; }
+    .rikishi-chip .remove {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1;
+      transition: color 0.1s;
+      background: none;
+      border: none;
+      padding: 0 2px;
+    }
+    .rikishi-chip .remove:hover { color: var(--danger); }
+
+    .empty-hint {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-align: center;
+      padding: 24px 12px;
+      line-height: 1.8;
+    }
+
+    /* ─── Top Controls ─── */
+    .chart-controls {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .chart-controls .info {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+    .clear-btn {
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .clear-btn:hover { background: var(--danger); color: var(--bg); border-color: var(--danger); }
+
+    /* ─── Chart Area ─── */
+    .chart-wrap {
+      padding: 20px 24px 24px;
+      position: relative;
+    }
+    .chart-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* connection config panel */
+    .config-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .config-bar input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      outline: none;
+      flex: 1;
+      min-width: 160px;
+    }
+    .config-bar input:focus { border-color: var(--accent); }
+    .config-bar input::placeholder { color: var(--muted); }
+    .config-bar button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 7px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .config-bar button:hover { opacity: 0.85; }
+    .config-bar .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .config-bar .status-dot.connected { background: #4aca8a; }
+    .config-bar .status-dot.error { background: var(--danger); }
+    .config-bar .status-label {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+
+    .preset-buttons {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .preset-btn {
+      background: var(--surface2);
+      color: var(--accent);
+      border: 1px solid var(--accent2);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover { background: var(--accent); color: var(--bg); }
+    .preset-btn:disabled { opacity: 0.5; cursor: wait; }
+
+    /* Tooltip override */
+    .chartjs-tooltip {
+      background: var(--surface2) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 4px !important;
+      color: var(--text) !important;
+      font-family: 'DM Mono', monospace !important;
+      font-size: 12px !important;
+      padding: 8px 12px !important;
+    }
+
+    /* Demo data notice */
+    .demo-notice {
+      font-size: 10px;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      border: 1px solid var(--accent2);
+      border-radius: 4px;
+      padding: 3px 8px;
+    }
+
+    /* Page tabs */
+    .page-tabs {
+      display: flex;
+      gap: 4px;
+      margin-left: 24px;
+    }
+    .page-tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .page-tab:hover { color: var(--text); }
+    .page-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* Tables page */
+    #tables-page { display: none; }
+    body.show-tables #tables-page { display: block; }
+    body.show-tables main { display: none; }
+    body.show-tables .config-bar .preset-buttons { display: none; }
+
+    .tables-wrap {
+      padding: 24px 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+      overflow-y: auto;
+      height: calc(100vh - 69px - 46px);
+    }
+    .table-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .table-tab {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      padding: 7px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .table-tab:hover { color: var(--text); border-color: var(--accent2); }
+    .table-tab.active {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+
+    .table-section { margin-bottom: 40px; }
+    .table-section h2 {
+      font-family: 'Shippori Mincho', serif;
+      font-size: 18px;
+      color: var(--accent);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .table-section .subtitle {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.data-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--surface2);
+    }
+    table.data-table tr:hover td { background: var(--surface); }
+    table.data-table .rank-num {
+      color: var(--muted);
+      width: 36px;
+    }
+    table.data-table .name-cell { color: var(--text); font-weight: 500; }
+    table.data-table .rating-cell { color: var(--accent); font-weight: 500; }
+    table.data-table .muted-cell { color: var(--muted); }
+    table.data-table th.rating-cell { color: var(--muted); }
+    .table-loading { color: var(--muted); font-size: 12px; padding: 20px 12px; }
+    .show-top-btn {
+      background: var(--surface2);
+      color: var(--accent);
+      border: 1px solid var(--accent2);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 7px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 14px;
+      transition: all 0.15s;
+    }
+    .show-top-btn:hover { background: var(--accent); color: var(--bg); }
+    .div-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .div-btn {
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .div-btn:hover { color: var(--text); border-color: var(--accent2); }
+    .div-btn.active { background: var(--accent2); color: var(--text); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>相撲 Tracker</h1>
+  <span>Rikishi Performance Analysis</span>
+  <nav class="page-tabs">
+    <button class="page-tab active" id="tab-chart"  onclick="switchPage('chart')">Chart</button>
+    <button class="page-tab"        id="tab-tables" onclick="switchPage('tables')">Tables</button>
+  </nav>
+</header>
+
+<!-- Supabase config bar -->
+<div class="config-bar" id="config-bar">
+  <div class="status-dot" id="status-dot"></div>
+  <span class="status-label" id="status-label">Connecting…</span>
+  <span class="demo-notice" id="demo-badge" style="display:none">DEMO</span>
+  <div class="preset-buttons">
+    <button class="preset-btn" onclick="loadPreset('yokozuna', this)">Yokozuna</button>
+    <button class="preset-btn" onclick="loadPreset('ozeki', this)">Ozeki</button>
+    <button class="preset-btn" onclick="loadPreset('averages', this)">Averages</button>
+  </div>
+</div>
+
+<main>
+  <!-- Sidebar -->
+  <aside>
+    <div class="sidebar-section">
+      <label>Metric</label>
+      <div class="toggle-group">
+        <button class="active" onclick="setMetric('rating', this)">Rating</button>
+        <button onclick="setMetric('rank', this)">Rank</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <label>Add rikishi</label>
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Search name…" autocomplete="off"
+          oninput="onSearch(this.value)"
+          onfocus="showDropdown()"
+        />
+        <div class="dropdown" id="dropdown"></div>
+      </div>
+    </div>
+
+    <div class="rikishi-list" id="rikishi-list">
+      <div class="empty-hint" id="empty-hint">
+        Search for a rikishi<br/>above to add them<br/>to the chart
+      </div>
+    </div>
+  </aside>
+
+  <!-- Chart Controls -->
+  <div class="chart-controls">
+    <span style="color:var(--muted);font-size:11px;letter-spacing:0.1em;text-transform:uppercase" id="metric-label">Rating over time</span>
+    <button class="clear-btn" id="clear-btn" onclick="clearChart()">Clear</button>
+    <span class="info" id="basho-range"></span>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-wrap">
+    <div class="chart-container">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+</main>
+
+<!-- Tables page -->
+<div id="tables-page">
+  <div class="tables-wrap">
+    <div class="table-switcher">
+      <button class="table-tab active" id="tt-peak"    onclick="showTable('peak', this)">Peak Ratings</button>
+      <button class="table-tab"        id="tt-trough"  onclick="showTable('trough', this)">Lowest Trough</button>
+      <button class="table-tab"        id="tt-current" onclick="showTable('current', this)">Current Top 50</button>
+      <button class="table-tab"        id="tt-careers" onclick="showTable('careers', this)">Longest Careers</button>
+      <button class="table-tab"        id="tt-underrated" onclick="showTable('underrated', this)">Most Underrated</button>
+      <button class="table-tab"        id="tt-overrated"  onclick="showTable('overrated', this)">Most Overrated</button>
+      <button class="table-tab"        id="tt-neveryok"   onclick="showTable('neveryok', this)">Best Under Rank</button>
+      <button class="table-tab"        id="tt-consistent" onclick="showTable('consistent', this)">Most Consistent</button>
+      <button class="table-tab"        id="tt-comeback"   onclick="showTable('comeback', this)">Biggest Comebacks</button>
+    </div>
+
+    <div class="table-section" id="section-peak">
+      <h2>All-Time Peak Ratings</h2>
+      <div class="subtitle">Highest Elos reached at each rank</div>
+      <div class="div-btns" id="divbtns-peak"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('peak')">Show Top 10 on Chart →</button>
+      <div id="peak-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-trough" style="display:none">
+      <h2>Lowest Troughs</h2>
+      <div class="subtitle">Lowest Elos reached at each rank</div>
+      <div class="div-btns" id="divbtns-trough"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('trough')">Show Bottom 10 on Chart →</button>
+      <div id="trough-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-current" style="display:none">
+      <h2>Current Top 50</h2>
+      <div class="subtitle">Highest ratings right now, excluding wrestlers who didn't fight in the most recent basho</div>
+      <div class="div-btns" id="divbtns-current"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('current')">Show Top 10 on Chart →</button>
+      <div id="current-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-careers" style="display:none">
+      <h2>Longest Careers</h2>
+      <div class="subtitle">Most basho fought - sort by highest rank achieved</div>
+      <div class="div-btns" id="divbtns-careers"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('careers')">Show Top 10 on Chart →</button>
+      <div id="careers-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-underrated" style="display:none">
+      <h2>Most Underrated</h2>
+      <div class="subtitle">Single basho where rating most exceeded the wrestler's rank-tier average</div>
+      <div class="div-btns" id="divbtns-underrated"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('underrated')">Show Top 10 on Chart →</button>
+      <div id="underrated-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-overrated" style="display:none">
+      <h2>Most Overrated</h2>
+      <div class="subtitle">Single basho where rating fell furthest below the wrestler's rank-tier average</div>
+      <div class="div-btns" id="divbtns-overrated"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('overrated')">Show Top 10 on Chart →</button>
+      <div id="overrated-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-neveryok" style="display:none">
+      <h2>Best Never-Yokozuna</h2>
+      <div class="subtitle">Highest peak rating among wrestlers who never reached the selected rank or higher</div>
+      <div class="div-btns" id="divbtns-neveryok"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('neveryok')">Show Top 10 on Chart →</button>
+      <div id="neveryok-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-consistent" style="display:none">
+      <h2>Most Consistent</h2>
+      <div class="subtitle">Smallest rating variation over a career of 30+ basho</div>
+      <div class="div-btns" id="divbtns-consistent"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('consistent')">Show Top 10 on Chart →</button>
+      <div id="consistent-table" class="table-loading">Loading…</div>
+    </div>
+
+    <div class="table-section" id="section-comeback" style="display:none">
+      <h2>Biggest Comebacks</h2>
+      <div class="subtitle">Largest rise from a career trough to a later peak</div>
+      <div class="div-btns" id="divbtns-comeback"></div>
+      <button class="show-top-btn" onclick="showTopOnChart('comeback')">Show Top 10 on Chart →</button>
+      <div id="comeback-table" class="table-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────
+let supabaseClient = null;
+let allData = [];        // rows for rikishi currently on chart (keyed by rikishi_id)
+let rikishiList = [];    // [{id, label, base_name, final_year}] from DB
+let activeRikishi = [];  // array of rikishi_id currently on chart
+let averageSeries = [];  // [{tier, points:[{x,rating}]}] — preset "Averages" view
+let demoMode = true;     // true until a successful Supabase connection
+let metric = 'rating';
+let chart = null;
+const colorValues = ['#c8922a','#4a9eca','#ca4a7e','#4aca8a','#9a6aca','#ca8a4a','#4acaca','#ca4a4a'];
+
+// Return a colour for series index i. Uses the curated palette for the first
+// 8 series, then generates maximally-contrasting hues for any beyond that.
+// Uses the golden angle (137.5°) so consecutive series land far apart on the
+// colour wheel rather than next to each other — important for presets where
+// many series of varied eras are shown at once.
+function seriesColor(i, total) {
+  if (total <= colorValues.length) return colorValues[i % colorValues.length];
+  const GOLDEN_ANGLE = 137.508;
+  const hue = (i * GOLDEN_ANGLE) % 360;
+  // Alternate lightness and saturation in a short cycle to further separate
+  // any hues that happen to land close together.
+  const light = [52, 64, 58, 70][i % 4];
+  const sat   = [65, 55, 72, 60][i % 4];
+  return `hsl(${hue.toFixed(1)}, ${sat}%, ${light}%)`;
+}
+
+// ─── Rank Ordering ────────────────────────────────────
+// Build an ordered list of every canonical rank string, highest → lowest.
+// rankToPosition(str) → integer 1 (Yokozuna) … N (Mae-zumo). Higher = worse.
+const RANK_ORDER = (() => {
+  const list = [];
+  list.push('Yokozuna');
+  list.push('Ozeki');
+  list.push('Sekiwake');
+  list.push('Komusubi');
+  for (let i = 1; i <= 18; i++) list.push(`Maegashira ${i}`);
+  for (let i = 1; i <= 14; i++) list.push(`Juryo ${i}`);
+  for (let i = 1; i <= 120; i++) list.push(`Makushita ${i}`);
+  for (let i = 1; i <= 160; i++) list.push(`Sandanme ${i}`);
+  for (let i = 1; i <= 250; i++) list.push(`Jonidan ${i}`);
+  for (let i = 1; i <= 50; i++)  list.push(`Jonokuchi ${i}`);
+  list.push('Mae-zumo');
+  return list; // index 0 = Yokozuna
+})();
+
+// Map rank string → numeric position (1-based, 1 = best)
+const RANK_TO_POS = Object.fromEntries(RANK_ORDER.map((r, i) => [r, i + 1]));
+const POS_TO_RANK = Object.fromEntries(RANK_ORDER.map((r, i) => [i + 1, r]));
+const MAX_RANK_POS = RANK_ORDER.length;
+
+function rankToPosition(rankStr) {
+  if (!rankStr) return null;
+  // Exact match first
+  if (RANK_TO_POS[rankStr] !== undefined) return RANK_TO_POS[rankStr];
+
+  // Case-insensitive exact match
+  const lower = rankStr.toLowerCase().trim();
+  const found = RANK_ORDER.find(r => r.toLowerCase() === lower);
+  if (found) return RANK_TO_POS[found];
+
+  // Sanyaku ranks in the data carry a number/side (e.g. "Yokozuna 1",
+  // "Ozeki 2", "Sekiwake 1") but our scale has a single slot for each.
+  // Map any such rank to its base sanyaku position.
+  const sanyaku = ['Yokozuna', 'Ozeki', 'Sekiwake', 'Komusubi'];
+  for (const s of sanyaku) {
+    if (lower.startsWith(s.toLowerCase())) return RANK_TO_POS[s];
+  }
+
+  // Numbered divisions: "Maegashira 3", "Juryo 11", etc. — strip extra
+  // tokens and try "Division N".
+  const m = rankStr.match(/^([A-Za-z-]+)\s+(\d+)/);
+  if (m) {
+    const key = `${m[1]} ${parseInt(m[2], 10)}`;
+    if (RANK_TO_POS[key] !== undefined) return RANK_TO_POS[key];
+  }
+
+  // Mae-zumo variants
+  if (lower.startsWith('mae')) return RANK_TO_POS['Mae-zumo'];
+
+  return null;
+}
+
+function positionToRank(pos) {
+  return POS_TO_RANK[pos] || String(pos);
+}
+
+// ─── Equal-space division scale ───────────────────────
+// Each division gets an equal-height band on the y-axis regardless of how
+// many ranks it contains. Within a band, rank interpolates linearly.
+// Bands are numbered 0 (top, Sanyaku/Maegashira) downward.
+//
+// We treat the four sanyaku + maegashira as ONE top band ("Makuuchi"),
+// then Juryo, Makushita, Sandanme, Jonidan, Jonokuchi, Mae-zumo.
+const DIVISION_BANDS = [
+  // Sanyaku (top ranks) get their own band, separate from Maegashira
+  { name: 'Sanyaku',   ranks: ['Yokozuna','Ozeki','Sekiwake','Komusubi'] },
+  { name: 'Maegashira',ranks: Array.from({length:18}, (_,i)=>`Maegashira ${i+1}`) },
+  { name: 'Juryo',     ranks: Array.from({length:14}, (_,i)=>`Juryo ${i+1}`) },
+  { name: 'Makushita', ranks: Array.from({length:120},(_,i)=>`Makushita ${i+1}`) },
+  { name: 'Sandanme',  ranks: Array.from({length:160},(_,i)=>`Sandanme ${i+1}`) },
+  { name: 'Jonidan',   ranks: Array.from({length:250},(_,i)=>`Jonidan ${i+1}`) },
+  { name: 'Jonokuchi', ranks: Array.from({length:50}, (_,i)=>`Jonokuchi ${i+1}`) },
+  { name: 'Mae-zumo',  ranks: ['Mae-zumo'] },
+];
+
+const N_BANDS = DIVISION_BANDS.length;
+
+// For each rank string, precompute its display y-value (0 = top of chart,
+// N_BANDS = bottom). Within a band of K ranks, rank i maps to
+// bandIndex + (i + 0.5) / K  so ranks sit centred in equal sub-slots.
+const RANK_TO_DISPLAY = (() => {
+  const map = {};
+  DIVISION_BANDS.forEach((band, bandIdx) => {
+    const K = band.ranks.length;
+    band.ranks.forEach((rank, i) => {
+      map[rank] = bandIdx + (i + 0.5) / K;
+    });
+  });
+  return map;
+})();
+
+// Resolve any rank string (including numbered sanyaku) to a display y-value.
+function rankToDisplay(rankStr) {
+  if (!rankStr) return null;
+  if (RANK_TO_DISPLAY[rankStr] !== undefined) return RANK_TO_DISPLAY[rankStr];
+
+  const lower = rankStr.toLowerCase().trim();
+
+  // Numbered sanyaku → base name
+  const sanyaku = ['Yokozuna','Ozeki','Sekiwake','Komusubi'];
+  for (const s of sanyaku) {
+    if (lower.startsWith(s.toLowerCase())) return RANK_TO_DISPLAY[s];
+  }
+  // Division N
+  const m = rankStr.match(/^([A-Za-z-]+)\s+(\d+)/);
+  if (m) {
+    const key = `${m[1]} ${parseInt(m[2],10)}`;
+    if (RANK_TO_DISPLAY[key] !== undefined) return RANK_TO_DISPLAY[key];
+  }
+  if (lower.startsWith('mae')) return RANK_TO_DISPLAY['Mae-zumo'];
+  return null;
+}
+
+// Band index (0..N_BANDS-1) that a display value falls in.
+function displayToBandName(display) {
+  const idx = Math.floor(display);
+  return DIVISION_BANDS[Math.max(0, Math.min(N_BANDS - 1, idx))].name;
+}
+
+// Convert a basho_id like "202503" (YYYYMM) to a fractional year for the x-axis.
+// Month 1→0.0, 3→0.17, 5→0.33, 7→0.5, 9→0.67, 11→0.83
+function bashoIdToYear(bashoId) {
+  if (!bashoId) return null;
+  const s = String(bashoId);
+  const year  = parseInt(s.slice(0, 4), 10);
+  const month = parseInt(s.slice(4, 6), 10);
+  if (isNaN(year)) return null;
+  const frac = isNaN(month) ? 0 : (month - 1) / 12;
+  return year + frac;
+}
+
+// ─── Tick positions for rank axis ────────────────────
+// Show a label at each division boundary (not every position).
+const RANK_TICK_POSITIONS = [
+  1,   // Yokozuna
+  2,   // Ozeki
+  3,   // Sekiwake
+  4,   // Komusubi
+  5,   // Maegashira 1
+  22,  // Juryo 1  (4 sanyaku + 18 maegashira + 1)
+  36,  // Makushita 1  (22 + 14)
+  156, // Sandanme 1  (36 + 120)
+  316, // Jonidan 1   (156 + 160)
+  566, // Jonokuchi 1 (316 + 250)
+  616, // Mae-zumo    (566 + 50)
+];
+
+// ─── Demo Data ────────────────────────────────────────
+function generateDemoData() {
+  const rikishi = [
+    // Sanyaku
+    { name: 'Terunofuji',  baseRating: 1800, startRank: 'Yokozuna' },
+    { name: 'Takakeisho',  baseRating: 1720, startRank: 'Ozeki' },
+    { name: 'Hoshoryu',    baseRating: 1650, startRank: 'Ozeki' },
+    { name: 'Kirishima',   baseRating: 1620, startRank: 'Sekiwake' },
+    { name: 'Wakatakakage',baseRating: 1600, startRank: 'Komusubi' },
+    // Maegashira
+    { name: 'Kotonowaka',  baseRating: 1580, startRank: 'Maegashira 3' },
+    { name: 'Daieisho',    baseRating: 1540, startRank: 'Maegashira 7' },
+    { name: 'Wakamotoharu',baseRating: 1510, startRank: 'Maegashira 12' },
+    { name: 'Mitakeumi',   baseRating: 1490, startRank: 'Maegashira 15' },
+    { name: 'Nishikigi',   baseRating: 1460, startRank: 'Maegashira 18' },
+    // Juryo
+    { name: 'Gonoyama',    baseRating: 1380, startRank: 'Juryo 3' },
+    { name: 'Hakuoho',     baseRating: 1350, startRank: 'Juryo 8' },
+    { name: 'Roga',        baseRating: 1310, startRank: 'Juryo 13' },
+    // Makushita
+    { name: 'Fujiseiun',   baseRating: 1200, startRank: 'Makushita 5' },
+    { name: 'Shimazuumi',  baseRating: 1150, startRank: 'Makushita 30' },
+    { name: 'Kitanowaka',  baseRating: 1100, startRank: 'Makushita 75' },
+    // Sandanme
+    { name: 'Arauma',      baseRating:  980, startRank: 'Sandanme 20' },
+    { name: 'Tsurugisho',  baseRating:  920, startRank: 'Sandanme 90' },
+    // Jonidan
+    { name: 'Oshoma',      baseRating:  780, startRank: 'Jonidan 50' },
+    { name: 'Takerufuji',  baseRating:  720, startRank: 'Jonidan 150' },
+    // Jonokuchi / Mae-zumo
+    { name: 'Shunrai',     baseRating:  580, startRank: 'Jonokuchi 20' },
+    { name: 'Daiamami',    baseRating:  480, startRank: 'Mae-zumo' },
+  ];
+  const rows = [];
+  for (let b = 1; b <= 20; b++) {
+    rikishi.forEach(r => {
+      const ratingJitter = (Math.random() - 0.5) * 60;
+      // Simulate rank movement: drift ±2 positions per basho, clamped
+      const startPos = rankToPosition(r.startRank);
+      const posJitter = Math.round((Math.random() - 0.5) * 4 * b * 0.3);
+      const pos = Math.max(1, Math.min(MAX_RANK_POS, startPos + posJitter));
+      rows.push({
+        basho: b,
+        rikishi_name: r.name,
+        rating: Math.round(r.baseRating + ratingJitter + b * 3),
+        rank: RANK_ORDER[pos - 1], // store as string
+      });
+    });
+  }
+  return rows;
+}
+
+// ─── Supabase Connection ──────────────────────────────
+// Credentials are hardcoded — replace with your own values.
+const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
+const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDA0Njg2OCwiZXhwIjoyMDk1NjIyODY4fQ.VOmFVVGvuNt2S49KgvO1xx4EZ-1SWxoiqW8poI7jV5g';                 // ← your anon key
+const SB_TABLE = 'results_clean';                      // ← view name
+
+let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
+
+async function connectSupabase() {
+  try {
+    // Paginate through the rikishi lookup table (one row per rikishi_id).
+    let rows = [];
+    let from = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const to = from + pageSize - 1;
+      const resp = await fetch(
+        `${sbUrl}/rest/v1/rikishi?select=rikishi_id,rikishi_name,base_name,final_year&order=rikishi_name`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                     Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+      );
+      if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+      const page = await resp.json();
+      if (!page.length) break;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      from += pageSize;
+    }
+
+    if (!rows.length) throw new Error('No rikishi found');
+
+    rikishiList = rows.map(r => ({
+      id:         r.rikishi_id,
+      label:      r.rikishi_name,        // "Name (YYYY)" most-recent name
+      base_name:  r.base_name,
+      final_year: r.final_year,
+    }));
+    demoMode = false;
+    allData = [];
+    activeRikishi = [];
+
+    setStatus('connected', `Connected — ${rikishiList.length} rikishi`);
+    document.getElementById('demo-badge').style.display = 'none';
+    refreshAll();
+    // If the user is already viewing the Tables page, populate it now
+    if (document.body.classList.contains('show-tables')) loadTables();
+  } catch(e) {
+    setStatus('error', 'DB unavailable — using demo data');
+    document.getElementById('demo-badge').style.display = '';
+    demoMode = true;
+    allData = generateDemoData();
+    // Build a rikishiList from demo data (id = name for demo)
+    const names = [...new Set(allData.map(r => r.rikishi_name))].sort();
+    rikishiList = names.map(n => ({ id: n, label: n, base_name: n, final_year: '' }));
+    refreshAll();
+  }
+}
+
+async function fetchRikishiData(id) {
+  // Fetch all basho data for a single rikishi (by rikishi_id) on demand.
+  if (demoMode) return; // demo data already in allData
+  try {
+    const resp = await fetch(
+      `${sbUrl}/rest/v1/${sbTable}?rikishi_id=eq.${id}&select=basho,basho_id,rikishi_id,rating,rank&order=basho&limit=2000`,
+      { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } }
+    );
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const rows = await resp.json();
+    // Merge into allData keyed by rikishi_id + basho, avoiding duplicates
+    const existing = new Set(allData.map(r => `${r.rikishi_id}__${r.basho}`));
+    rows.forEach(r => {
+      if (!existing.has(`${r.rikishi_id}__${r.basho}`)) allData.push(r);
+    });
+  } catch(e) {
+    console.error('Failed to fetch data for id', id, e);
+  }
+}
+
+// Fetch all rows for a list of rikishi_ids, paginating past the 1000-row cap.
+async function fetchManyRikishiData(ids) {
+  if (demoMode || !ids.length) return;
+  const idList = ids.join(',');
+  const existing = new Set(allData.map(r => `${r.rikishi_id}__${r.basho}`));
+  let from = 0;
+  const pageSize = 1000;
+  try {
+    while (true) {
+      const to = from + pageSize - 1;
+      const resp = await fetch(
+        `${sbUrl}/rest/v1/${sbTable}?rikishi_id=in.(${idList})&select=basho,basho_id,rikishi_id,rating,rank&order=rikishi_id,basho`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                     Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+      );
+      if (!resp.ok) throw new Error(`${resp.status}`);
+      const rows = await resp.json();
+      if (!rows.length) break;
+      rows.forEach(r => {
+        const key = `${r.rikishi_id}__${r.basho}`;
+        if (!existing.has(key)) { existing.add(key); allData.push(r); }
+      });
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+  } catch(e) {
+    console.error('Failed to fetch preset data', e);
+  }
+}
+
+// ─── Preset selections ────────────────────────────────
+// Fetch all distinct rikishi_ids matching a PostgREST filter, paginating
+// past Supabase's 1000-row response cap. `filter` is the raw query string
+// (e.g. "rank=like.Yokozuna*" or "basho_id=eq.202501&or=(...)").
+async function fetchDistinctIds(filter) {
+  const idSet = new Set();
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const to = from + pageSize - 1;
+    const resp = await fetch(
+      `${sbUrl}/rest/v1/${sbTable}?${filter}&select=rikishi_id`,
+      { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                   Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+    );
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const rows = await resp.json();
+    if (!rows.length) break;
+    rows.forEach(r => idSet.add(r.rikishi_id));
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return [...idSet];
+}
+
+// ─── Averages preset ──────────────────────────────────
+// Tier order top→bottom; fixed colours so the bands read intuitively.
+const AVG_TIERS = [
+  'Yokozuna','Ozeki','Sekiwake','Komusubi','Maegashira',
+  'Juryo','Makushita','Sandanme','Jonidan','Jonokuchi',
+];
+const AVG_COLORS = {
+  Yokozuna:  '#9a4ec8',   // purple
+  Ozeki:     '#8b2942',   // maroon
+  Sekiwake:  '#d62828',   // primary red
+  Komusubi:  '#ff8c1a',   // bright orange
+  Maegashira:'#4a7eca',   // blue
+  Juryo:     '#9ad4a0',   // pastel green
+  Makushita: '#e8c84a',   // yellow
+  Sandanme:  '#4acaca',   // cyan
+  Jonidan:   '#888888',   // grey
+  Jonokuchi: '#f0ece0',   // white
+};
+
+async function loadAverages() {
+  // Pull the precomputed per-basho tier averages, paginating past the cap.
+  let rows = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const to = from + pageSize - 1;
+    const resp = await fetch(
+      `${sbUrl}/rest/v1/rank_averages?select=basho,basho_id,tier,avg_rating&order=basho_id`,
+      { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                   Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+    );
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const page = await resp.json();
+    if (!page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  if (!rows.length) { alert('No average data found'); return; }
+
+  // Group rows into one series per tier
+  const byTier = {};
+  AVG_TIERS.forEach(t => { byTier[t] = []; });
+  rows.forEach(r => {
+    if (byTier[r.tier]) {
+      byTier[r.tier].push({ x: bashoIdToYear(r.basho_id), rating: Number(r.avg_rating) });
+    }
+  });
+
+  averageSeries = AVG_TIERS
+    .filter(t => byTier[t].length)
+    .map(t => ({ tier: t, points: byTier[t].sort((a, b) => a.x - b.x) }));
+
+  // Clear normal selections, force rating mode, redraw
+  activeRikishi = [];
+  allData = [];
+  if (metric !== 'rating') setMetricDirect('rating');
+  // Always rebuild the chart so the legend (shown only for averages) refreshes
+  if (chart) { chart.destroy(); chart = null; }
+  renderChips();
+  updateChart();
+}
+
+// Set metric without needing a button element (used by presets).
+function setMetricDirect(m) {
+  metric = m;
+  document.querySelectorAll('.toggle-group button').forEach(b => {
+    b.classList.toggle('active',
+      (m === 'rating' && b.textContent.trim() === 'Rating') ||
+      (m === 'rank'   && b.textContent.trim() === 'Rank'));
+  });
+  document.getElementById('metric-label').textContent =
+    m === 'rating' ? 'Rating over time' : 'Rank over time';
+  if (chart) { chart.destroy(); chart = null; }
+}
+
+// Query the DB for rikishi matching a preset, then load them onto the chart.
+async function loadPreset(kind, btn) {
+  if (demoMode) { alert('Presets require a database connection'); return; }
+  if (btn) btn.disabled = true;
+  const oldLabel = btn ? btn.textContent : '';
+  if (btn) btn.textContent = 'Loading…';
+
+  try {
+    // ── Averages preset: special-cased, doesn't use activeRikishi ──
+    if (kind === 'averages') {
+      await loadAverages();
+      return;
+    }
+
+    let ids = [];
+
+    if (kind === 'yokozuna') {
+      // Everyone who ever held Yokozuna (≥1 basho).
+      ids = await fetchDistinctIds('rank=like.Yokozuna*');
+
+    } else if (kind === 'ozeki') {
+      // Held Ozeki for ≥1 basho but NEVER reached Yokozuna.
+      const [ozIds, yokIds] = await Promise.all([
+        fetchDistinctIds('rank=like.Ozeki*'),
+        fetchDistinctIds('rank=like.Yokozuna*'),
+      ]);
+      const everYokozuna = new Set(yokIds);
+      ids = ozIds.filter(id => !everYokozuna.has(id));
+    }
+
+    if (!ids.length) { alert('No matching rikishi found'); return; }
+
+    // Clear current selection and load the preset
+    activeRikishi = ids.slice();
+    allData = [];
+    await fetchManyRikishiData(ids);
+    renderChips();
+    updateChart();
+  } catch(e) {
+    console.error('Preset failed', e);
+    alert('Failed to load preset: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+  }
+}
+
+function setStatus(state, msg) {
+  document.getElementById('status-dot').className = 'status-dot ' + state;
+  document.getElementById('status-label').textContent = msg;
+}
+
+// ─── Metric Toggle ────────────────────────────────────
+function setMetric(m, btn) {
+  metric = m;
+  document.querySelectorAll('.toggle-group button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('metric-label').textContent = m === 'rating' ? 'Rating over time' : 'Rank over time';
+  // Averages are rating-only; clear them if switching to rank view
+  if (m === 'rank') averageSeries = [];
+  // Must destroy and recreate chart when switching metric type
+  // because the y-axis config changes significantly
+  if (chart) { chart.destroy(); chart = null; }
+  updateChart();
+}
+
+// ─── Search / Dropdown ───────────────────────────────
+// rikishiList holds {id, label, base_name, final_year}. Active list holds ids.
+function availableRikishi() {
+  return rikishiList.filter(r => !activeRikishi.includes(r.id));
+}
+
+// Rank search results: exact prefix matches first (so "Hak" -> Hakatagawa
+// before Asahakuryu), then substring matches. Within each group, the most
+// recently active wrestler (higher final_year) comes first.
+function searchRikishi(query) {
+  const q = query.toLowerCase().trim();
+  const pool = availableRikishi();
+  if (!q) {
+    return pool.slice().sort((a, b) =>
+      a.base_name.localeCompare(b.base_name) ||
+      (b.final_year || '').localeCompare(a.final_year || '')
+    );
+  }
+  const scored = [];
+  for (const r of pool) {
+    const name = r.base_name.toLowerCase();
+    let tier;
+    if (name.startsWith(q))    tier = 0;   // prefix match - top priority
+    else if (name.includes(q)) tier = 1;   // substring match
+    else continue;
+    scored.push({ r, tier });
+  }
+  scored.sort((a, b) =>
+    a.tier - b.tier ||
+    a.r.base_name.localeCompare(b.r.base_name) ||
+    (b.r.final_year || '').localeCompare(a.r.final_year || '')
+  );
+  return scored.map(s => s.r);
+}
+
+function onSearch(val) {
+  renderDropdown(searchRikishi(val));
+  document.getElementById('dropdown').classList.add('open');
+}
+
+function renderDropdown(list) {
+  const dd = document.getElementById('dropdown');
+  if (!list.length) {
+    dd.innerHTML = '<div class="dropdown-item" style="color:var(--muted)">No results</div>';
+    return;
+  }
+  dd.innerHTML = list.slice(0, 50).map(r => {
+    const yr = r.final_year ? `<span class="rank-badge">${r.final_year}</span>` : '';
+    return `<div class="dropdown-item" onclick="addRikishi('${r.id}')">
+      ${r.base_name}${yr}
+    </div>`;
+  }).join('');
+}
+
+function showDropdown() {
+  renderDropdown(searchRikishi(document.getElementById('search-input').value));
+  document.getElementById('dropdown').classList.add('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap'))
+    document.getElementById('dropdown').classList.remove('open');
+});
+
+// ─── Chip hover highlighting via event delegation ─────
+// Delegation (rather than per-chip onmouseenter) keeps highlighting correct
+// when the list scrolls under a stationary cursor. We track the current
+// highlighted index and only update the chart when it actually changes.
+let _highlightIdx = null;
+
+(function setupChipHover() {
+  const list = document.getElementById('rikishi-list');
+
+  function chipIdxFromEvent(e) {
+    const chip = e.target.closest('.rikishi-chip');
+    if (!chip || !list.contains(chip)) return null;
+    const idx = parseInt(chip.getAttribute('data-idx'), 10);
+    return isNaN(idx) ? null : idx;
+  }
+
+  list.addEventListener('mousemove', e => {
+    const idx = chipIdxFromEvent(e);
+    if (idx === _highlightIdx) return;     // no change
+    _highlightIdx = idx;
+    if (idx === null) clearHighlight();
+    else highlightSeries(idx);
+  });
+
+  list.addEventListener('mouseleave', () => {
+    _highlightIdx = null;
+    clearHighlight();
+  });
+
+  // When the list scrolls, the chip under the cursor changes without a
+  // mousemove — reset so the next mousemove re-evaluates cleanly.
+  list.addEventListener('scroll', () => {
+    if (_highlightIdx !== null) {
+      _highlightIdx = null;
+      clearHighlight();
+    }
+  });
+})();
+
+// ─── Rikishi Management ───────────────────────────────
+function rikishiById(id) {
+  return rikishiList.find(r => String(r.id) === String(id));
+}
+
+async function addRikishi(id) {
+  if (activeRikishi.map(String).includes(String(id))) { document.getElementById('dropdown').classList.remove('open'); return; }
+  if (activeRikishi.length >= 100) { alert('Maximum 100 rikishi at once'); return; }
+  const wasAverages = averageSeries.length > 0;
+  averageSeries = [];   // adding a real rikishi exits the averages view
+  if (wasAverages && chart) { chart.destroy(); chart = null; }  // refresh legend off
+  activeRikishi.push(id);
+  document.getElementById('search-input').value = '';
+  document.getElementById('dropdown').classList.remove('open');
+  renderChips();
+  await fetchRikishiData(id);
+  updateChart();
+}
+
+function removeRikishi(id) {
+  activeRikishi = activeRikishi.filter(x => String(x) !== String(id));
+  renderChips();
+  updateChart();
+  if (document.getElementById('dropdown').classList.contains('open')) showDropdown();
+}
+
+function renderChips() {
+  _highlightIdx = null;   // indices change on re-render; reset hover state
+  const list = document.getElementById('rikishi-list');
+  if (!activeRikishi.length) {
+    // Show the empty hint. It may have been removed from the DOM by a previous
+    // render, so rebuild it from scratch rather than relying on a stale ref.
+    list.innerHTML =
+      '<div class="empty-hint" id="empty-hint">' +
+      'Search for a rikishi<br/>above to add them<br/>to the chart' +
+      '</div>';
+    return;
+  }
+  const total = activeRikishi.length;
+  list.innerHTML = activeRikishi.map((id, i) => {
+    const color = seriesColor(i, total);
+    const r = rikishiById(id);
+    const label = r ? r.base_name : String(id);
+    return `<div class="rikishi-chip" data-idx="${i}" style="--color:${color}">
+      <span class="name">${label}</span>
+      <button class="remove" onclick="removeRikishi('${id}')">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── Series highlight on chip hover ───────────────────
+// Dim every series except the hovered one so it stands out while still
+// allowing comparison against the faded others.
+function highlightSeries(idx) {
+  if (!chart || activeRikishi.length < 2) return;
+  chart.data.datasets.forEach((ds, j) => {
+    const base = seriesColor(j, activeRikishi.length);
+    if (j === idx) {
+      ds.borderColor = base;
+      ds.backgroundColor = base;
+      ds.pointBackgroundColor = base;
+      ds.borderWidth = 3;
+      ds.order = 0;               // draw on top
+    } else {
+      const faded = fade(base, 0.12);
+      ds.borderColor = faded;
+      ds.backgroundColor = faded;
+      ds.pointBackgroundColor = faded;
+      ds.borderWidth = 1.5;
+      ds.order = 1;
+    }
+  });
+  chart.update('none');           // no animation for snappy hover
+}
+
+function clearHighlight() {
+  if (!chart) return;
+  chart.data.datasets.forEach((ds, j) => {
+    const base = seriesColor(j, activeRikishi.length);
+    ds.borderColor = base;
+    ds.backgroundColor = base;
+    ds.pointBackgroundColor = base;
+    ds.borderWidth = 2;
+    ds.order = 0;
+  });
+  chart.update('none');
+}
+
+// Convert any colour (hex or hsl) to a faded rgba/hsla string.
+function fade(color, alpha) {
+  if (color.startsWith('hsl(')) {
+    return color.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`);
+  }
+  if (color.startsWith('#')) {
+    const n = parseInt(color.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return color;
+}
+
+// ─── Chart ────────────────────────────────────────────
+function buildDatasets() {
+  const isRank = metric === 'rank';
+  const datasets = activeRikishi.map((id, i) => {
+    const rObj = rikishiById(id);
+    const label = rObj ? rObj.base_name : String(id);
+    // In demo mode rows are keyed by rikishi_name; in DB mode by rikishi_id
+    const rows = allData
+      .filter(r => demoMode ? r.rikishi_name === id : String(r.rikishi_id) === String(id))
+      .sort((a, b) => a.basho - b.basho);
+
+    const points = rows.map(r => {
+      const x = r.basho_id ? bashoIdToYear(r.basho_id) : r.basho;
+      if (isRank) {
+        const y = rankToDisplay(r.rank);
+        return { x, y, rank: r.rank };          // keep original rank for tooltip
+      }
+      return { x, y: r.rating };
+    });
+
+    // Per-point radius: in rank mode, hide the dot when this basho's rank is
+    // identical to the previous basho's (reduces clutter on long plateaus).
+    const pointRadius = points.map((pt, j) => {
+      if (!isRank) return 3;
+      if (j === 0) return 4;
+      const prev = points[j - 1];
+      // Same display band & same rank string → suppress the circle
+      if (prev && prev.rank === points[j].rank) return 0;
+      return 4;
+    });
+
+    return {
+      label: label,
+      data: points,
+      borderColor: seriesColor(i, activeRikishi.length),
+      backgroundColor: seriesColor(i, activeRikishi.length),
+      borderWidth: 2,
+      pointRadius,
+      pointHoverRadius: 6,
+      // Hit radius is independent of visible radius, so suppressed (r=0)
+      // plateau points are still easy to hover.
+      pointHitRadius: 12,
+      tension: isRank ? 0 : 0.3,   // straight segments for rank steps
+      fill: false,
+      spanGaps: false,
+    };
+  });
+
+  // Append the "Averages" preset series (rating mode only). These are not
+  // real rikishi — they have no chip and aren't searchable.
+  if (!isRank && averageSeries.length) {
+    averageSeries.forEach(s => {
+      datasets.push({
+        label: `${s.tier} (avg)`,
+        data: s.points.map(p => ({ x: p.x, y: p.rating })),
+        borderColor: AVG_COLORS[s.tier] || '#888',
+        backgroundColor: AVG_COLORS[s.tier] || '#888',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHitRadius: 8,
+        tension: 0.3,
+        fill: false,
+        spanGaps: true,
+      });
+    });
+  }
+
+  return datasets;
+}
+
+function updateChart() {
+  const datasets = buildDatasets();
+  const allBasho = [...new Set(allData.map(r => r.basho))].sort((a, b) => a - b);
+
+  if (allBasho.length) {
+    document.getElementById('basho-range').textContent =
+      `Basho ${allBasho[0]} – ${allBasho[allBasho.length - 1]}`;
+  } else if (averageSeries.length) {
+    document.getElementById('basho-range').textContent = 'Division averages by basho';
+  } else {
+    document.getElementById('basho-range').textContent = '';
+  }
+
+  const isRank = metric === 'rank';
+
+  // ── Equal-band rank axis ──────────────────────────────
+  // Display values run 0 (top) … N_BANDS (bottom). Each integer boundary is a
+  // division line. We show only the bands that the active series occupy.
+  let bandMin = 0, bandMax = N_BANDS;        // band-index range to show
+  if (isRank && datasets.length > 0) {
+    const ys = datasets.flatMap(ds => ds.data.map(pt => pt.y)).filter(v => v != null);
+    if (ys.length) {
+      bandMin = Math.floor(Math.min(...ys));      // top-most band touched
+      bandMax = Math.ceil(Math.max(...ys));       // bottom-most band edge
+      if (bandMax === bandMin) bandMax = bandMin + 1;
+    }
+  }
+  // Padding so points at a band edge aren't clipped. The axis is reversed,
+  // so displayMin renders at the TOP — give it extra headroom (0.12 band heights)
+  // while the bottom keeps a smaller margin.
+  const displayMin = Math.max(0, bandMin - 0.12);
+  const displayMax = Math.min(N_BANDS, bandMax + 0.06);
+
+  // Tick at the centre of each visible band → division name label
+  const bandTicks = [];
+  for (let b = Math.floor(displayMin); b < Math.ceil(displayMax); b++) {
+    if (b >= 0 && b < N_BANDS) bandTicks.push(b + 0.5);
+  }
+
+  const yScaleConfig = isRank ? {
+    reverse: true,
+    min: displayMin,
+    max: displayMax,
+    title: {
+      display: true,
+      text: 'Division',
+      color: '#7a7060',
+      font: { family: "'DM Mono', monospace", size: 11 },
+    },
+    ticks: {
+      color: '#7a7060',
+      font: { family: "'DM Mono', monospace", size: 10 },
+      callback: (val) => {
+        // Label only band centres
+        const idx = Math.floor(val);
+        if (Math.abs(val - (idx + 0.5)) < 1e-6 && idx >= 0 && idx < N_BANDS) {
+          return DIVISION_BANDS[idx].name;
+        }
+        return null;
+      },
+      autoSkip: false,
+    },
+    afterBuildTicks: (axis) => {
+      axis.ticks = bandTicks.map(v => ({ value: v }));
+    },
+    grid: { color: '#1e1a15' },
+    border: { color: '#2e2820' },
+  } : {
+    reverse: false,
+    grace: '8%',   // headroom above the highest rating so points don't clip
+    title: {
+      display: true,
+      text: 'Rating',
+      color: '#7a7060',
+      font: { family: "'DM Mono', monospace", size: 11 },
+    },
+    ticks: {
+      color: '#7a7060',
+      font: { family: "'DM Mono', monospace", size: 11 },
+    },
+    grid: { color: '#1e1a15' },
+    border: { color: '#2e2820' },
+  };
+
+  const tooltipLabel = isRank
+    ? (item) => ` ${item.dataset.label}: ${item.raw.rank || '—'}`
+    : (item) => ` ${item.dataset.label}: ${item.parsed.y}`;
+
+  if (chart) {
+    chart.data.datasets = datasets;
+    chart.options.scales.y = yScaleConfig;
+    chart.options.plugins.tooltip.callbacks.label = tooltipLabel;
+    chart.update();
+    return;
+  }
+
+  const ctx = document.getElementById('chart').getContext('2d');
+
+  // Plugin: draw faint horizontal separators at each division band boundary
+  const bandSeparators = {
+    id: 'bandSeparators',
+    beforeDatasetsDraw(c) {
+      if (metric !== 'rank') return;
+      const yScale = c.scales.y;
+      const { left, right, top, bottom } = c.chartArea;
+      const ctx2 = c.ctx;
+      ctx2.save();
+
+      // Shade alternating division bands for easier reading.
+      for (let b = 0; b < N_BANDS; b++) {
+        if (b % 2 === 1) continue;            // shade even-index bands only
+        // Band b spans display values [b, b+1]; clamp to visible chart area.
+        let yTop    = yScale.getPixelForValue(b);
+        let yBottom = yScale.getPixelForValue(b + 1);
+        // Axis is reversed, so getPixelForValue(b) is higher up (smaller y).
+        const yHi = Math.max(top, Math.min(yTop, yBottom));
+        const yLo = Math.min(bottom, Math.max(yTop, yBottom));
+        if (yLo > yHi) {
+          ctx2.fillStyle = 'rgba(255, 255, 255, 0.025)';
+          ctx2.fillRect(left, yHi, right - left, yLo - yHi);
+        }
+      }
+
+      // Division boundary lines.
+      ctx2.strokeStyle = '#3a3328';
+      ctx2.lineWidth = 1;
+      for (let b = 0; b <= N_BANDS; b++) {
+        const yPix = yScale.getPixelForValue(b);
+        if (yPix >= top - 1 && yPix <= bottom + 1) {
+          ctx2.beginPath();
+          ctx2.moveTo(left, yPix);
+          ctx2.lineTo(right, yPix);
+          ctx2.stroke();
+        }
+      }
+      ctx2.restore();
+    },
+  };
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    plugins: [bandSeparators],
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: {
+          display: averageSeries.length > 0,   // show only in Averages view
+          position: 'bottom',
+          labels: {
+            color: '#e8e0d0',
+            font: { family: "'DM Mono', monospace", size: 11 },
+            boxWidth: 14, boxHeight: 3, padding: 12,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#181410',
+          borderColor: '#2e2820',
+          borderWidth: 1,
+          titleColor: '#c8922a',
+          bodyColor: '#e8e0d0',
+          titleFont: { family: "'DM Mono', monospace", size: 11, weight: '500' },
+          bodyFont: { family: "'DM Mono', monospace", size: 11 },
+          padding: 10,
+          callbacks: {
+            title: items => {
+              const x = items[0].parsed.x;
+              // x is a fractional year when connected; show whole year + month
+              if (x > 1900) {
+                const yr = Math.floor(x);
+                const month = Math.round((x - yr) * 12) + 1;
+                const monthNames = {1:'Jan',3:'Mar',5:'May',7:'Jul',9:'Sep',11:'Nov'};
+                return `${monthNames[month] || ''} ${yr}`.trim();
+              }
+              return `Basho ${x}`;
+            },
+            label: tooltipLabel,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: {
+            display: true,
+            text: 'Year',
+            color: '#7a7060',
+            font: { family: "'DM Mono', monospace", size: 11 },
+          },
+          ticks: {
+            color: '#7a7060',
+            font: { family: "'DM Mono', monospace", size: 11 },
+            // Show whole-year labels only
+            callback: (val) => (Number.isInteger(val) ? val : null),
+          },
+          grid: { color: '#1e1a15' },
+          border: { color: '#2e2820' },
+        },
+        y: yScaleConfig,
+      },
+    },
+  });
+}
+
+// ─── Tables page ──────────────────────────────────────
+let tablesLoaded = false;
+let tableData = {};   // cached rows per table, incl. rikishi_id
+
+// Switch which table section is visible
+const TABLE_KEYS = ['peak','trough','current','careers','underrated','overrated','neveryok','consistent','comeback'];
+
+function showTable(which, btn) {
+  document.querySelectorAll('.table-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  TABLE_KEYS.forEach(k => {
+    const sec = document.getElementById('section-' + k);
+    if (sec) sec.style.display = (k === which) ? '' : 'none';
+  });
+}
+
+function switchPage(page) {
+  document.getElementById('tab-chart').classList.toggle('active', page === 'chart');
+  document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
+  document.body.classList.toggle('show-tables', page === 'tables');
+  if (page === 'tables' && !tablesLoaded) loadTables();
+}
+
+async function sbSelect(path) {
+  const resp = await fetch(`${sbUrl}/rest/v1/${path}`,
+    { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } });
+  if (!resp.ok) throw new Error(`${resp.status}`);
+  return resp.json();
+}
+
+// Declarative spec for every table: query path + columns.
+// Each spec: view name, select list, order clause, the rank column to filter
+// divisions on, and display columns.
+const TABLE_SPECS = {
+  peak: {
+    el: 'peak-table', view: 'peak_ratings',
+    select: 'rikishi_id,rikishi_name,peak_rating,peak_basho,peak_rank',
+    order: 'peak_rating.desc', rankField: 'peak_rank',
+    // When a division is selected, switch to the per-tier view so we get each
+    // wrestler's best rating *while at that rank* (filter on tier=eq.Division).
+    tierView: 'peak_by_tier', tierField: 'tier',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'peak_rating', label: 'Peak Rating', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'peak_rank', label: 'Rank at Peak', cls: 'muted-cell' },
+      { key: 'peak_basho', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+  trough: {
+    el: 'trough-table', view: 'trough_ratings',
+    select: 'rikishi_id,rikishi_name,trough_rating,trough_basho,trough_rank',
+    order: 'trough_rating.asc', rankField: 'trough_rank',
+    tierView: 'trough_by_tier', tierField: 'tier',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'trough_rating', label: 'Lowest Rating', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'trough_rank', label: 'Rank at Trough', cls: 'muted-cell' },
+      { key: 'trough_basho', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+  current: {
+    el: 'current-table', view: 'current_top',
+    select: 'rikishi_id,rikishi_name,rating,rank',
+    order: 'rating.desc', rankField: 'rank', limit: 50,
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'rating', label: 'Rating', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'rank', label: 'Official Rank', cls: 'muted-cell' },
+    ],
+  },
+  careers: {
+    el: 'careers-table', view: 'longest_careers',
+    select: 'rikishi_id,rikishi_name,basho_count,debut_basho,final_basho,peak_rating,peak_rank',
+    order: 'basho_count.desc', rankField: 'peak_rank',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'basho_count', label: 'Basho', cls: 'rating-cell' },
+      { key: 'debut_basho', label: 'Debut', cls: 'muted-cell', fmt: fmtBasho },
+      { key: 'final_basho', label: 'Last', cls: 'muted-cell', fmt: fmtBasho },
+      { key: 'peak_rating', label: 'Peak', cls: 'muted-cell', fmt: v => Math.round(v) },
+    ],
+  },
+  underrated: {
+    el: 'underrated-table', view: 'most_underrated',
+    select: 'rikishi_id,rikishi_name,basho_id,rank,rating,gap',
+    order: 'gap.desc', rankField: 'rank',
+    tierView: 'underrated_by_tier', tierField: 'tier',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'gap', label: 'Above Tier', cls: 'rating-cell', fmt: v => '+' + Math.round(v) },
+      { key: 'rating', label: 'Rating', cls: 'muted-cell', fmt: v => Math.round(v) },
+      { key: 'rank', label: 'Rank', cls: 'muted-cell' },
+      { key: 'basho_id', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+  overrated: {
+    el: 'overrated-table', view: 'most_overrated',
+    select: 'rikishi_id,rikishi_name,basho_id,rank,rating,gap',
+    order: 'gap.asc', rankField: 'rank',
+    tierView: 'overrated_by_tier', tierField: 'tier',
+    // Overrated excludes the two lowest divisions (Jonokuchi, Jonidan)
+    excludeDivisions: ['Jonokuchi', 'Jonidan'],
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'gap', label: 'Below Tier', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'rating', label: 'Rating', cls: 'muted-cell', fmt: v => Math.round(v) },
+      { key: 'rank', label: 'Rank', cls: 'muted-cell' },
+      { key: 'basho_id', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+  neveryok: {
+    el: 'neveryok-table', view: 'best_under_rank',
+    select: 'rikishi_id,rikishi_name,peak_rating,peak_basho,peak_rank,best_rank,best_pos',
+    order: 'peak_rating.desc', rankField: 'peak_rank',
+    underRank: true,            // special: filter by best_pos > threshold
+    noAll: true,                // no "All" button
+    excludeDivisions: ['Jonokuchi'],  // no Jonokuchi button
+    defaultDivision: 'Yokozuna',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'peak_rating', label: 'Peak Rating', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'best_rank', label: 'Highest Rank', cls: 'muted-cell' },
+      { key: 'peak_basho', label: 'Peak Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+  consistent: {
+    el: 'consistent-table', view: 'most_consistent',
+    select: 'rikishi_id,rikishi_name,basho_count,avg_rating,rating_stddev,peak_rank',
+    order: 'rating_stddev.asc', rankField: 'peak_rank',
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'rating_stddev', label: 'Std Dev', cls: 'rating-cell', fmt: v => Math.round(v) },
+      { key: 'avg_rating', label: 'Avg Rating', cls: 'muted-cell', fmt: v => Math.round(v) },
+      { key: 'basho_count', label: 'Basho', cls: 'muted-cell' },
+    ],
+  },
+  comeback: {
+    el: 'comeback-table', view: 'biggest_comebacks',
+    select: 'rikishi_id,rikishi_name,peak_rank,original_peak,trough_rank,trough_basho,divisions_fallen,ranks_fallen,peak_pos',
+    order: 'divisions_fallen.desc,peak_pos.asc',
+    noDivisions: true,          // this table has no division filter
+    cols: [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'divisions_fallen', label: 'Divisions Fallen', cls: 'rating-cell' },
+      { key: 'original_peak', label: 'Original Peak', cls: 'muted-cell' },
+      { key: 'trough_rank', label: 'Fell To', cls: 'muted-cell' },
+      { key: 'peak_rank', label: 'Peak Rank', cls: 'muted-cell' },
+      { key: 'trough_basho', label: 'Trough Basho', cls: 'muted-cell', fmt: fmtBasho },
+    ],
+  },
+};
+
+// Divisions, top → bottom, for the filter buttons.
+const DIVISIONS_FILTER = ['Yokozuna','Ozeki','Sekiwake','Komusubi','Maegashira',
+  'Juryo','Makushita','Sandanme','Jonidan','Jonokuchi'];
+
+// "Never reached division X or higher" = the wrestler's best rank sits in the
+// division BELOW X. This maps each division to the first rank_to_pos value
+// that counts as "below it" — i.e. the first position of the next division down.
+// best_pos >= this value  ==>  never reached the selected division or higher.
+const NEVER_REACHED_POS = {
+  Yokozuna: 2,     // never Yokozuna  => best rank Ozeki(2) or worse
+  Ozeki: 3,        // never Ozeki+    => Sekiwake(3) or worse
+  Sekiwake: 4,     // never Sekiwake+ => Komusubi(4) or worse
+  Komusubi: 5,     // never Komusubi+ => Maegashira(5) or worse
+  Maegashira: 23,  // never Maegashira+ (never makuuchi) => Juryo(23) or worse
+  Juryo: 37,       // never Juryo+ => Makushita(37) or worse
+  Makushita: 157,  // never Makushita+ => Sandanme(157) or worse
+  Sandanme: 317,   // never Sandanme+ => Jonidan(317) or worse
+  Jonidan: 567,    // never Jonidan+ => Jonokuchi(567) or worse
+  Jonokuchi: 9999, // never Jonokuchi+ => effectively nobody (excluded anyway)
+};
+
+// Currently-selected division per table (null = All).
+const tableDivision = {};
+
+// Build the PostgREST query for a table, applying division + exclusions.
+function buildTableQuery(spec, division) {
+  const limit = spec.limit || 100;
+
+  // Best-under-rank table: "never reached <division> or higher" means the
+  // wrestler's highest rank position is strictly below that division's top.
+  if (spec.underRank) {
+    const div = division || spec.defaultDivision;
+    const threshold = NEVER_REACHED_POS[div];
+    // best_pos >= threshold  ==> never reached that division or higher
+    return `${spec.view}?select=${spec.select}&order=${spec.order}` +
+           `&best_pos=gte.${threshold}&limit=${limit}`;
+  }
+
+  // Peak/Trough with a division selected: use the per-tier view so we get
+  // each wrestler's best/worst rating *while at that rank*.
+  if (division && spec.tierView) {
+    return `${spec.tierView}?select=${spec.select},tier&order=${spec.order}` +
+           `&${spec.tierField}=eq.${division}&limit=${limit}`;
+  }
+
+  let q = `${spec.view}?select=${spec.select}&order=${spec.order}&limit=${limit}`;
+  if (division) {
+    q += `&${spec.rankField}=like.${division}*`;
+  } else if (spec.excludeDivisions) {
+    spec.excludeDivisions.forEach(d => {
+      q += `&${spec.rankField}=not.like.${d}*`;
+    });
+  }
+  return q;
+}
+
+// Render the row of division filter buttons for a table.
+function renderDivisionButtons(key) {
+  const spec = TABLE_SPECS[key];
+  const sel = tableDivision[key] || (spec.noAll ? spec.defaultDivision : null);
+  let html = '';
+  if (!spec.noAll) {
+    const allActive = sel === null ? ' active' : '';
+    html += `<button class="div-btn${allActive}" onclick="filterDivision('${key}', null, this)">All</button>`;
+  }
+  DIVISIONS_FILTER.forEach(d => {
+    if (spec.excludeDivisions && spec.excludeDivisions.includes(d)) return;  // skip excluded
+    const active = sel === d ? ' active' : '';
+    html += `<button class="div-btn${active}" onclick="filterDivision('${key}', '${d}', this)">${d}</button>`;
+  });
+  return html;
+}
+
+// Update the under-rank table's heading to "Best Never-<rank>".
+function updateUnderRankTitle(division) {
+  const h = document.querySelector('#section-neveryok h2');
+  if (h) h.textContent = `Best Never-${division}`;
+}
+
+// Re-query a table filtered to a division (or null for all).
+async function filterDivision(key, division, btn) {
+  tableDivision[key] = division;
+  // Update button active states within this section
+  const section = document.getElementById('section-' + key);
+  if (section) section.querySelectorAll('.div-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const spec = TABLE_SPECS[key];
+  if (spec.underRank) updateUnderRankTitle(division || spec.defaultDivision);
+
+  const el = document.getElementById(spec.el);
+  el.classList.add('table-loading');
+  el.textContent = 'Loading…';
+  try {
+    const rows = await sbSelect(buildTableQuery(spec, division));
+    tableData[key] = rows;
+    renderTable(spec.el, rows, spec.cols);
+  } catch(e) {
+    el.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+async function loadTables() {
+  if (demoMode) {
+    document.getElementById('peak-table').textContent = 'Tables require a database connection.';
+    return;   // don't mark loaded — retry when user revisits after connecting
+  }
+  tablesLoaded = true;
+
+  for (const key of TABLE_KEYS) {
+    const spec = TABLE_SPECS[key];
+    if (!spec) continue;
+    // Inject the division filter button row into the section (once)
+    const holder = document.getElementById('divbtns-' + key);
+    if (holder && !holder.dataset.built && !spec.noDivisions) {
+      holder.innerHTML = renderDivisionButtons(key);
+      holder.dataset.built = '1';
+    }
+    try {
+      const rows = await sbSelect(buildTableQuery(spec, tableDivision[key] || null));
+      tableData[key] = rows;
+      renderTable(spec.el, rows, spec.cols);
+      if (spec.underRank) updateUnderRankTitle(tableDivision[key] || spec.defaultDivision);
+    } catch(e) {
+      const el = document.getElementById(spec.el);
+      if (el) el.textContent = 'Failed to load: ' + e.message;
+    }
+  }
+}
+
+// Load the top 10 rikishi from a given table onto the Chart page (rating view).
+async function showTopOnChart(which) {
+  const rows = tableData[which];
+  if (!rows || !rows.length) { alert('Table not loaded yet'); return; }
+  const ids = rows.slice(0, 10).map(r => r.rikishi_id);
+
+  // Switch to chart, rating mode, clear any averages/selection, then load.
+  switchPage('chart');
+  averageSeries = [];
+  if (metric !== 'rating') setMetricDirect('rating');
+  if (chart) { chart.destroy(); chart = null; }
+  activeRikishi = ids.slice();
+  allData = [];
+  await fetchManyRikishiData(ids);
+  renderChips();
+  updateChart();
+}
+
+// Format a basho_id "202501" → "Jan 2025"
+function fmtBasho(bashoId) {
+  const s = String(bashoId);
+  const months = {1:'Jan',3:'Mar',5:'May',7:'Jul',9:'Sep',11:'Nov'};
+  const yr = s.slice(0, 4), mo = parseInt(s.slice(4, 6), 10);
+  return `${months[mo] || ''} ${yr}`.trim();
+}
+
+function renderTable(elId, rows, columns) {
+  const el = document.getElementById(elId);
+  if (!rows || !rows.length) { el.textContent = 'No data.'; return; }
+  const head = '<tr>' + columns.map(c => `<th class="${c.cls || ''}">${c.label}</th>`).join('') + '</tr>';
+  const body = rows.map((row, i) => {
+    const cells = columns.map(c => {
+      let val = c.key === '__idx' ? (i + 1) : row[c.key];
+      if (c.fmt && c.key !== '__idx') val = c.fmt(val);
+      return `<td class="${c.cls || ''}">${val ?? '—'}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  el.classList.remove('table-loading');
+  el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+// Clear all series from the chart and reset to an empty rating view.
+function clearChart() {
+  activeRikishi = [];
+  averageSeries = [];
+  allData = [];
+  // Destroy so the legend (averages-only) and any state resets cleanly.
+  if (chart) { chart.destroy(); chart = null; }
+  renderChips();
+  updateChart();
+}
+
+// ─── Init ─────────────────────────────────────────────
+function refreshAll() {
+  renderChips();
+  updateChart();
+}
+
+// Load demo data immediately so chart isn't blank while connecting
+allData = generateDemoData();
+updateChart();
+
+// Auto-connect to Supabase on page load
+connectSupabase();
+</script>
+</body>
+</html>

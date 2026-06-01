@@ -392,6 +392,18 @@
       border-bottom: 1px solid var(--border);
       padding-bottom: 12px;
     }
+    .table-scale {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .table-scale .scale-label {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
     .table-tab {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -518,9 +530,17 @@
   <aside>
     <div class="sidebar-section">
       <label>Metric</label>
-      <div class="toggle-group">
+      <div class="toggle-group" id="metric-toggle">
         <button class="active" onclick="setMetric('rating', this)">Rating</button>
         <button onclick="setMetric('rank', this)">Rank</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="scale-section">
+      <label>Rating scale</label>
+      <div class="toggle-group">
+        <button class="active" onclick="setScale('raw', this)">Raw</button>
+        <button onclick="setScale('adjusted', this)">Era-adjusted</button>
       </div>
     </div>
 
@@ -560,6 +580,14 @@
 <!-- Tables page -->
 <div id="tables-page">
   <div class="tables-wrap">
+    <div class="table-scale">
+      <span class="scale-label">Rating scale:</span>
+      <div class="toggle-group" id="table-scale-toggle" style="display:inline-flex;width:auto">
+        <button class="active" onclick="setTableScale('raw', this)">Raw</button>
+        <button onclick="setTableScale('adjusted', this)">Era-adjusted</button>
+      </div>
+    </div>
+
     <div class="table-switcher">
       <button class="table-tab active" id="tt-peak"    onclick="showTable('peak', this)">Peak Ratings</button>
       <button class="table-tab"        id="tt-trough"  onclick="showTable('trough', this)">Lowest Trough</button>
@@ -655,6 +683,7 @@ let activeRikishi = [];  // array of rikishi_id currently on chart
 let averageSeries = [];  // [{tier, points:[{x,rating}]}] — preset "Averages" view
 let demoMode = true;     // true until a successful Supabase connection
 let metric = 'rating';
+let scale = 'raw';   // 'raw' | 'adjusted' — which rating column to plot
 let chart = null;
 const colorValues = ['#c8922a','#4a9eca','#ca4a7e','#4aca8a','#9a6aca','#ca8a4a','#4acaca','#ca4a4a'];
 
@@ -941,11 +970,13 @@ async function fetchRikishiData(id) {
   if (demoMode) return; // demo data already in allData
   try {
     const resp = await fetch(
-      `${sbUrl}/rest/v1/${sbTable}?rikishi_id=eq.${id}&select=basho,basho_id,rikishi_id,rating,rank&order=basho&limit=2000`,
+      `${sbUrl}/rest/v1/results_adjusted?rikishi_id=eq.${id}&select=basho,basho_id,rikishi_id,raw_rating,adj_rating,rank&order=basho&limit=2000`,
       { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } }
     );
     if (!resp.ok) throw new Error(`${resp.status}`);
     const rows = await resp.json();
+    // Normalise: expose both rating scales plus a default `rating` (raw)
+    rows.forEach(r => { r.rating = r.raw_rating; });
     // Merge into allData keyed by rikishi_id + basho, avoiding duplicates
     const existing = new Set(allData.map(r => `${r.rikishi_id}__${r.basho}`));
     rows.forEach(r => {
@@ -967,7 +998,7 @@ async function fetchManyRikishiData(ids) {
     while (true) {
       const to = from + pageSize - 1;
       const resp = await fetch(
-        `${sbUrl}/rest/v1/${sbTable}?rikishi_id=in.(${idList})&select=basho,basho_id,rikishi_id,rating,rank&order=rikishi_id,basho`,
+        `${sbUrl}/rest/v1/results_adjusted?rikishi_id=in.(${idList})&select=basho,basho_id,rikishi_id,raw_rating,adj_rating,rank&order=rikishi_id,basho`,
         { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
                      Range: `${from}-${to}`, 'Range-Unit': 'items' } }
       );
@@ -975,6 +1006,7 @@ async function fetchManyRikishiData(ids) {
       const rows = await resp.json();
       if (!rows.length) break;
       rows.forEach(r => {
+        r.rating = r.raw_rating;   // default rating column = raw
         const key = `${r.rikishi_id}__${r.basho}`;
         if (!existing.has(key)) { existing.add(key); allData.push(r); }
       });
@@ -1077,13 +1109,15 @@ async function loadAverages() {
 // Set metric without needing a button element (used by presets).
 function setMetricDirect(m) {
   metric = m;
-  document.querySelectorAll('.toggle-group button').forEach(b => {
+  document.querySelectorAll('#metric-toggle button').forEach(b => {
     b.classList.toggle('active',
       (m === 'rating' && b.textContent.trim() === 'Rating') ||
       (m === 'rank'   && b.textContent.trim() === 'Rank'));
   });
   document.getElementById('metric-label').textContent =
     m === 'rating' ? 'Rating over time' : 'Rank over time';
+  const scaleSec = document.getElementById('scale-section');
+  if (scaleSec) scaleSec.style.opacity = (m === 'rank') ? '0.4' : '1';
   if (chart) { chart.destroy(); chart = null; }
 }
 
@@ -1141,15 +1175,39 @@ function setStatus(state, msg) {
 // ─── Metric Toggle ────────────────────────────────────
 function setMetric(m, btn) {
   metric = m;
-  document.querySelectorAll('.toggle-group button').forEach(b => b.classList.remove('active'));
+  // Scope to this button's own toggle-group so the scale toggle isn't affected
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('metric-label').textContent = m === 'rating' ? 'Rating over time' : 'Rank over time';
+  document.getElementById('metric-label').textContent = m === 'rating'
+    ? (scale === 'adjusted' ? 'Rating over time (era-adjusted)' : 'Rating over time')
+    : 'Rank over time';
+  // Rating scale only matters in rating mode — grey it out under rank
+  const scaleSec = document.getElementById('scale-section');
+  if (scaleSec) scaleSec.style.opacity = (m === 'rank') ? '0.4' : '1';
   // Averages are rating-only; clear them if switching to rank view
   if (m === 'rank') averageSeries = [];
-  // Must destroy and recreate chart when switching metric type
-  // because the y-axis config changes significantly
   if (chart) { chart.destroy(); chart = null; }
   updateChart();
+}
+
+// ─── Rating scale toggle (raw vs era-adjusted) ────────
+function setScale(s, btn) {
+  scale = s;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Adjusted scale only affects rating mode; redraw if we're showing ratings
+  if (metric === 'rating') {
+    document.getElementById('metric-label').textContent =
+      s === 'adjusted' ? 'Rating over time (era-adjusted)' : 'Rating over time';
+    if (chart) { chart.destroy(); chart = null; }
+    updateChart();
+  }
+}
+
+// Pick the rating value for a row based on the current scale.
+function ratingValue(r) {
+  if (scale === 'adjusted' && r.adj_rating != null) return r.adj_rating;
+  return r.rating;
 }
 
 // ─── Search / Dropdown ───────────────────────────────
@@ -1373,7 +1431,7 @@ function buildDatasets() {
         const y = rankToDisplay(r.rank);
         return { x, y, rank: r.rank };          // keep original rank for tooltip
       }
-      return { x, y: r.rating };
+      return { x, y: ratingValue(r) };
     });
 
     // Per-point radius: in rank mode, hide the dot when this basho's rank is
@@ -1668,7 +1726,7 @@ async function sbSelect(path) {
 // divisions on, and display columns.
 const TABLE_SPECS = {
   peak: {
-    el: 'peak-table', view: 'peak_ratings',
+    el: 'peak-table', view: 'peak_ratings', adjView: 'peak_ratings_adj', adjTierView: 'peak_by_tier_adj',
     select: 'rikishi_id,rikishi_name,peak_rating,peak_basho,peak_rank',
     order: 'peak_rating.desc', rankField: 'peak_rank',
     // When a division is selected, switch to the per-tier view so we get each
@@ -1683,7 +1741,7 @@ const TABLE_SPECS = {
     ],
   },
   trough: {
-    el: 'trough-table', view: 'trough_ratings',
+    el: 'trough-table', view: 'trough_ratings', adjView: 'trough_ratings_adj', adjTierView: 'trough_by_tier_adj',
     select: 'rikishi_id,rikishi_name,trough_rating,trough_basho,trough_rank',
     order: 'trough_rating.asc', rankField: 'trough_rank',
     tierView: 'trough_by_tier', tierField: 'tier',
@@ -1696,7 +1754,7 @@ const TABLE_SPECS = {
     ],
   },
   current: {
-    el: 'current-table', view: 'current_top',
+    el: 'current-table', view: 'current_top', adjView: 'current_top_adj',
     select: 'rikishi_id,rikishi_name,rating,rank',
     order: 'rating.desc', rankField: 'rank', limit: 50,
     cols: [
@@ -1750,7 +1808,7 @@ const TABLE_SPECS = {
     ],
   },
   neveryok: {
-    el: 'neveryok-table', view: 'best_under_rank',
+    el: 'neveryok-table', view: 'best_under_rank', adjView: 'best_under_rank_adj',
     select: 'rikishi_id,rikishi_name,peak_rating,peak_basho,peak_rank,best_rank,best_pos',
     order: 'peak_rating.desc', rankField: 'peak_rank',
     underRank: true,            // special: filter by best_pos > threshold
@@ -1766,7 +1824,7 @@ const TABLE_SPECS = {
     ],
   },
   consistent: {
-    el: 'consistent-table', view: 'most_consistent',
+    el: 'consistent-table', view: 'most_consistent', adjView: 'most_consistent_adj',
     select: 'rikishi_id,rikishi_name,basho_count,avg_rating,rating_stddev,peak_rank',
     order: 'rating_stddev.asc', rankField: 'peak_rank',
     cols: [
@@ -1818,28 +1876,33 @@ const NEVER_REACHED_POS = {
 // Currently-selected division per table (null = All).
 const tableDivision = {};
 
+// Tables-page rating scale: 'raw' | 'adjusted'.
+let tableScale = 'raw';
+
 // Build the PostgREST query for a table, applying division + exclusions.
 function buildTableQuery(spec, division) {
   const limit = spec.limit || 100;
+  const adj   = tableScale === 'adjusted';
+  // Pick the adjusted view variants when in adjusted mode (falls back to raw
+  // for tables that have no adjusted variant, e.g. comebacks/careers).
+  const baseView = (adj && spec.adjView)     ? spec.adjView     : spec.view;
+  const tierView = (adj && spec.adjTierView) ? spec.adjTierView : spec.tierView;
 
-  // Best-under-rank table: "never reached <division> or higher" means the
-  // wrestler's highest rank position is strictly below that division's top.
+  // Best-under-rank table: "never reached <division> or higher".
   if (spec.underRank) {
     const div = division || spec.defaultDivision;
     const threshold = NEVER_REACHED_POS[div];
-    // best_pos >= threshold  ==> never reached that division or higher
-    return `${spec.view}?select=${spec.select}&order=${spec.order}` +
+    return `${baseView}?select=${spec.select}&order=${spec.order}` +
            `&best_pos=gte.${threshold}&limit=${limit}`;
   }
 
-  // Peak/Trough with a division selected: use the per-tier view so we get
-  // each wrestler's best/worst rating *while at that rank*.
-  if (division && spec.tierView) {
-    return `${spec.tierView}?select=${spec.select},tier&order=${spec.order}` +
+  // Peak/Trough with a division selected: use the per-tier view.
+  if (division && tierView) {
+    return `${tierView}?select=${spec.select},tier&order=${spec.order}` +
            `&${spec.tierField}=eq.${division}&limit=${limit}`;
   }
 
-  let q = `${spec.view}?select=${spec.select}&order=${spec.order}&limit=${limit}`;
+  let q = `${baseView}?select=${spec.select}&order=${spec.order}&limit=${limit}`;
   if (division) {
     q += `&${spec.rankField}=like.${division}*`;
   } else if (spec.excludeDivisions) {
@@ -1920,6 +1983,30 @@ async function loadTables() {
     } catch(e) {
       const el = document.getElementById(spec.el);
       if (el) el.textContent = 'Failed to load: ' + e.message;
+    }
+  }
+}
+
+// Flip the Tables-page rating scale and reload every table that's affected.
+async function setTableScale(s, btn) {
+  tableScale = s;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (demoMode || !tablesLoaded) return;
+  // Reload only the tables that have an adjusted variant (others are unchanged).
+  for (const key of TABLE_KEYS) {
+    const spec = TABLE_SPECS[key];
+    if (!spec || !spec.adjView) continue;
+    const el = document.getElementById(spec.el);
+    el.classList.add('table-loading');
+    el.textContent = 'Loading…';
+    try {
+      const rows = await sbSelect(buildTableQuery(spec, tableDivision[key] || null));
+      tableData[key] = rows;
+      renderTable(spec.el, rows, spec.cols);
+      if (spec.underRank) updateUnderRankTitle(tableDivision[key] || spec.defaultDivision);
+    } catch(e) {
+      el.textContent = 'Failed to load: ' + e.message;
     }
   }
 }

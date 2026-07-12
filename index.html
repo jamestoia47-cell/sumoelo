@@ -398,6 +398,12 @@
     body.show-tables main { display: none; }
     body.show-tables .config-bar .preset-buttons { display: none; }
 
+    /* Rivalries page */
+    #rivalries-page { display: none; }
+    body.show-rivalries #rivalries-page { display: block; }
+    body.show-rivalries main { display: none; }
+    body.show-rivalries .config-bar .preset-buttons { display: none; }
+
     .tables-wrap {
       padding: 24px 32px;
       max-width: 1100px;
@@ -517,8 +523,9 @@
   <h1>相撲 Tracker</h1>
   <span>Rikishi Performance Analysis</span>
   <nav class="page-tabs">
-    <button class="page-tab active" id="tab-chart"  onclick="switchPage('chart')">Chart</button>
-    <button class="page-tab"        id="tab-tables" onclick="switchPage('tables')">Tables</button>
+    <button class="page-tab active" id="tab-chart"     onclick="switchPage('chart')">Chart</button>
+    <button class="page-tab"        id="tab-tables"    onclick="switchPage('tables')">Tables</button>
+    <button class="page-tab"        id="tab-rivalries" onclick="switchPage('rivalries')">Rivalries</button>
   </nav>
 </header>
 
@@ -542,6 +549,14 @@
       <div class="toggle-group" id="metric-toggle">
         <button class="active" onclick="setMetric('rating', this)">Rating</button>
         <button onclick="setMetric('rank', this)">Rank</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <label>X-axis</label>
+      <div class="toggle-group" id="xmode-toggle">
+        <button class="active" onclick="setXMode('calendar', this)">Calendar</button>
+        <button onclick="setXMode('debut', this)">Since debut</button>
       </div>
     </div>
 
@@ -650,6 +665,38 @@
   </div>
 </div>
 
+<div id="rivalries-page">
+  <div class="tables-wrap">
+    <h2 style="margin-top:0">Rivalry Explorer</h2>
+    <div class="subtitle">Head-to-head records between every pair of wrestlers who have ever met</div>
+
+    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
+      <div class="toggle-group" id="rivalry-sort-toggle" style="display:inline-flex;width:auto">
+        <button class="active" onclick="setRivalrySort('matches', this)">Most Matches</button>
+        <button onclick="setRivalrySort('close', this)">Closest Record</button>
+      </div>
+      <div class="search-wrap" style="max-width:260px;margin-left:auto">
+        <input type="text" id="rivalry-search" placeholder="Filter by name…" autocomplete="off"
+          oninput="renderRivalryTable()" />
+      </div>
+    </div>
+
+    <div id="rivalry-table" class="table-loading">Loading…</div>
+
+    <div id="rivalry-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+      <button class="clear-btn" onclick="closeRivalryDetail()" style="float:right">Close ✕</button>
+      <h2 id="rivalry-detail-title" style="margin-top:0"></h2>
+      <div class="subtitle" id="rivalry-detail-subtitle"></div>
+
+      <div id="rivalry-kimarite" style="display:flex;gap:32px;flex-wrap:wrap;margin:20px 0"></div>
+
+      <h3 style="color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Match History</h3>
+      <div id="rivalry-matches-table" class="table-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── State ───────────────────────────────────────────
 let supabaseClient = null;
@@ -659,6 +706,7 @@ let activeRikishi = [];  // array of rikishi_id currently on chart
 let averageSeries = [];  // [{tier, points:[{x,rating}]}] — preset "Averages" view
 let demoMode = true;     // true until a successful Supabase connection
 let metric = 'rating';
+let xMode = 'calendar';   // 'calendar' (year) | 'debut' (basho since debut)
 let chart = null;
 const colorValues = ['#c8922a','#4a9eca','#ca4a7e','#4aca8a','#9a6aca','#ca8a4a','#4acaca','#ca4a4a'];
 
@@ -883,8 +931,8 @@ function generateDemoData() {
 
 // ─── Supabase Connection ──────────────────────────────
 // Credentials are hardcoded — replace with your own values.
-const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs';                 // ← your anon key
+const SB_URL   = 'https://your-project.supabase.co';   // ← your Supabase URL
+const SB_KEY   = 'your-anon-key-here';                 // ← your anon key
 const SB_TABLE = 'results_clean';                      // ← view name
 
 let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
@@ -945,7 +993,7 @@ async function fetchRikishiData(id) {
   if (demoMode) return; // demo data already in allData
   try {
     const resp = await fetch(
-      `${sbUrl}/rest/v1/results_adjusted?rikishi_id=eq.${id}&select=basho,basho_id,rikishi_id,adj_rating,rank&order=basho&limit=2000`,
+      `${sbUrl}/rest/v1/results_adjusted?rikishi_id=eq.${id}&select=basho,basho_id,rikishi_id,adj_rating,rank,debut_basho&order=basho&limit=2000`,
       { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } }
     );
     if (!resp.ok) throw new Error(`${resp.status}`);
@@ -973,7 +1021,7 @@ async function fetchManyRikishiData(ids) {
     while (true) {
       const to = from + pageSize - 1;
       const resp = await fetch(
-        `${sbUrl}/rest/v1/results_adjusted?rikishi_id=in.(${idList})&select=basho,basho_id,rikishi_id,adj_rating,rank&order=rikishi_id,basho`,
+        `${sbUrl}/rest/v1/results_adjusted?rikishi_id=in.(${idList})&select=basho,basho_id,rikishi_id,adj_rating,rank,debut_basho&order=rikishi_id,basho`,
         { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
                      Range: `${from}-${to}`, 'Range-Unit': 'items' } }
       );
@@ -1038,6 +1086,13 @@ const AVG_COLORS = {
 };
 
 async function loadAverages() {
+  // Averages are per-basho calendar series, not careers — force calendar x-axis.
+  if (xMode !== 'calendar') {
+    xMode = 'calendar';
+    const xt = document.getElementById('xmode-toggle');
+    if (xt) xt.querySelectorAll('button').forEach((b, i) =>
+      b.classList.toggle('active', i === 0));
+  }
   // Pull the precomputed per-basho tier averages, paginating past the cap.
   let rows = [];
   let from = 0;
@@ -1162,6 +1217,17 @@ function setMetric(m, btn) {
 // Rating value for a row (site uses era-adjusted ratings throughout).
 function ratingValue(r) {
   return r.adj_rating != null ? r.adj_rating : r.rating;
+}
+
+// ─── X-axis mode toggle (calendar year vs basho since debut) ─
+function setXMode(mode, btn) {
+  xMode = mode;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Averages are calendar-only (they're not a single career); clear if showing
+  if (mode === 'debut' && averageSeries.length) averageSeries = [];
+  if (chart) { chart.destroy(); chart = null; }
+  updateChart();
 }
 
 // ─── Search / Dropdown ───────────────────────────────
@@ -1388,8 +1454,17 @@ function buildDatasets() {
       .filter(r => demoMode ? r.rikishi_name === id : String(r.rikishi_id) === String(id))
       .sort((a, b) => a.basho - b.basho);
 
+    // For debut-aligned mode, x = basho since this wrestler's TRUE debut.
+    // Use the debut_basho carried on the rows (computed from full 1958+ data)
+    // so pre-1970 debutants align correctly; fall back to first visible row.
+    const debutBasho = rows.length
+      ? (rows[0].debut_basho != null ? rows[0].debut_basho : rows[0].basho)
+      : 0;
+
     const points = rows.map(r => {
-      const x = r.basho_id ? bashoIdToYear(r.basho_id) : r.basho;
+      const x = (xMode === 'debut')
+        ? (r.basho - debutBasho)                          // basho since true debut
+        : (r.basho_id ? bashoIdToYear(r.basho_id) : r.basho);
       if (isRank) {
         const y = rankToDisplay(r.rank);
         return { x, y, rank: r.rank };          // keep original rank for tooltip
@@ -1617,7 +1692,11 @@ function updateChart() {
           callbacks: {
             title: items => {
               const x = items[0].parsed.x;
-              // x is a fractional year when connected; show whole year + month
+              if (xMode === 'debut') {
+                const n = Math.round(x);
+                return n === 0 ? 'Debut basho' : `${n} basho since debut`;
+              }
+              // calendar: x is a fractional year; show whole year + month
               if (x > 1900) {
                 const yr = Math.floor(x);
                 const month = Math.round((x - yr) * 12) + 1;
@@ -1635,14 +1714,14 @@ function updateChart() {
           type: 'linear',
           title: {
             display: true,
-            text: 'Year',
+            text: (xMode === 'debut') ? 'Basho since debut' : 'Year',
             color: '#7a7060',
             font: { family: "'DM Mono', monospace", size: 11 },
           },
           ticks: {
             color: '#7a7060',
             font: { family: "'DM Mono', monospace", size: 11 },
-            // Show whole-year labels only
+            // Calendar: whole-year labels only. Debut: whole-number basho counts.
             callback: (val) => (Number.isInteger(val) ? val : null),
           },
           grid: { color: '#1e1a15' },
@@ -1656,6 +1735,7 @@ function updateChart() {
 
 // ─── Tables page ──────────────────────────────────────
 let tablesLoaded = false;
+let rivalriesLoaded = false;
 let tableData = {};   // cached rows per table, incl. rikishi_id
 
 // Switch which table section is visible
@@ -1673,8 +1753,11 @@ function showTable(which, btn) {
 function switchPage(page) {
   document.getElementById('tab-chart').classList.toggle('active', page === 'chart');
   document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
+  document.getElementById('tab-rivalries').classList.toggle('active', page === 'rivalries');
   document.body.classList.toggle('show-tables', page === 'tables');
+  document.body.classList.toggle('show-rivalries', page === 'rivalries');
   if (page === 'tables' && !tablesLoaded) loadTables();
+  if (page === 'rivalries' && !rivalriesLoaded) loadRivalries();
 }
 
 async function sbSelect(path) {
@@ -1922,7 +2005,168 @@ async function loadTables() {
   }
 }
 
-// Load the top 10 rikishi from a given table onto the Chart page (rating view).
+// ─── Rivalry Explorer ─────────────────────────────────
+let rivalryData = [];     // all pairs from the `rivalries` table
+let rivalrySort = 'matches';   // 'matches' | 'close'
+const RIVALRY_DISPLAY_LIMIT = 200;
+
+async function loadRivalries() {
+  const el = document.getElementById('rivalry-table');
+  if (demoMode) { el.textContent = 'Rivalries require a database connection.'; return; }
+  rivalriesLoaded = true;
+
+  try {
+    // Paginate past Supabase's 1000-row cap — there can be many thousands
+    // of pairs. Already sorted by total_matches desc in the table itself,
+    // so pulling more than we'll ever display just keeps close-record
+    // sorting meaningful too.
+    let rows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const to = from + pageSize - 1;
+      const resp = await fetch(
+        `${sbUrl}/rest/v1/rivalries?select=rikishi_a,rikishi_a_name,rikishi_b,rikishi_b_name,total_matches,a_wins,b_wins,win_diff,first_basho,last_basho&order=total_matches.desc`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                     Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+      );
+      if (!resp.ok) throw new Error(`${resp.status}`);
+      const page = await resp.json();
+      if (!page.length) break;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      from += pageSize;
+    }
+    rivalryData = rows;
+    renderRivalryTable();
+  } catch(e) {
+    el.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function setRivalrySort(mode, btn) {
+  rivalrySort = mode;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderRivalryTable();
+}
+
+function renderRivalryTable() {
+  const el = document.getElementById('rivalry-table');
+  if (!rivalryData.length) { el.textContent = 'No rivalry data found.'; return; }
+
+  const q = (document.getElementById('rivalry-search').value || '').trim().toLowerCase();
+  let rows = rivalryData;
+  if (q) {
+    rows = rows.filter(r =>
+      r.rikishi_a_name.toLowerCase().includes(q) ||
+      r.rikishi_b_name.toLowerCase().includes(q));
+  }
+
+  // "Closest record" = smallest win_diff relative to matches played, so a
+  // 3-3 series doesn't outrank a truly contested 30-28 one. Require a
+  // reasonable sample (5+ matches) so one-off bouts don't dominate.
+  if (rivalrySort === 'close') {
+    rows = rows.filter(r => r.total_matches >= 5)
+               .slice()
+               .sort((a, b) => (a.win_diff / a.total_matches) - (b.win_diff / b.total_matches)
+                              || b.total_matches - a.total_matches);
+  } else {
+    rows = rows.slice().sort((a, b) => b.total_matches - a.total_matches);
+  }
+
+  rows = rows.slice(0, RIVALRY_DISPLAY_LIMIT);
+
+  const head = `<tr>
+    <th class="rank-num">#</th>
+    <th class="name-cell">Rikishi A</th>
+    <th class="name-cell">Rikishi B</th>
+    <th class="rating-cell">Total Matches</th>
+    <th class="muted-cell">Record (A–B)</th>
+    <th class="muted-cell">Span</th>
+  </tr>`;
+  const body = rows.map((r, i) => `
+    <tr class="rivalry-row" onclick="showRivalryDetail(${r.rikishi_a}, ${r.rikishi_b})" style="cursor:pointer">
+      <td class="rank-num">${i + 1}</td>
+      <td class="name-cell">${r.rikishi_a_name}</td>
+      <td class="name-cell">${r.rikishi_b_name}</td>
+      <td class="rating-cell">${r.total_matches}</td>
+      <td class="muted-cell">${r.a_wins}–${r.b_wins}</td>
+      <td class="muted-cell">${fmtBasho(r.first_basho)} – ${fmtBasho(r.last_basho)}</td>
+    </tr>`).join('');
+
+  el.classList.remove('table-loading');
+  el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+// Show the full match history + kimarite breakdown for one pair.
+async function showRivalryDetail(idA, idB) {
+  const pair = rivalryData.find(r =>
+    (r.rikishi_a === idA && r.rikishi_b === idB) ||
+    (r.rikishi_a === idB && r.rikishi_b === idA));
+  if (!pair) return;
+
+  const detail = document.getElementById('rivalry-detail');
+  const nameA = pair.rikishi_a_name, nameB = pair.rikishi_b_name;
+  document.getElementById('rivalry-detail-title').textContent = `${nameA} vs ${nameB}`;
+  document.getElementById('rivalry-detail-subtitle').textContent =
+    `${pair.total_matches} meetings · ${pair.a_wins}–${pair.b_wins} · ${fmtBasho(pair.first_basho)} – ${fmtBasho(pair.last_basho)}`;
+  document.getElementById('rivalry-kimarite').innerHTML = '';
+  document.getElementById('rivalry-matches-table').classList.add('table-loading');
+  document.getElementById('rivalry-matches-table').textContent = 'Loading…';
+  detail.style.display = '';
+  detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const rows = await sbSelect(
+      `matches?or=(and(east_id.eq.${idA},west_id.eq.${idB}),and(east_id.eq.${idB},west_id.eq.${idA}))` +
+      `&select=basho_id,day,east_id,west_id,east_rank,west_rank,kimarite,winner_id` +
+      `&order=basho_id.desc,day.desc&limit=1000`
+    );
+
+    // Kimarite tally per winner
+    const kimA = {}, kimB = {};
+    rows.forEach(m => {
+      if (!m.kimarite) return;
+      const bucket = (m.winner_id === idA) ? kimA : (m.winner_id === idB ? kimB : null);
+      if (!bucket) return;
+      bucket[m.kimarite] = (bucket[m.kimarite] || 0) + 1;
+    });
+    const topKimarite = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    const renderKimBlock = (title, obj) => {
+      const entries = topKimarite(obj);
+      if (!entries.length) return `<div style="flex:1;min-width:200px"><h4 style="margin:0 0 8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.06em">${title}</h4><p class="subtitle" style="margin:0">No wins recorded</p></div>`;
+      const items = entries.map(([k, n]) => `<li>${k} <span class="muted-cell">×${n}</span></li>`).join('');
+      return `<div style="flex:1;min-width:200px"><h4 style="margin:0 0 8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.06em">${title}</h4><ul style="margin:0;padding-left:18px;line-height:1.7">${items}</ul></div>`;
+    };
+    document.getElementById('rivalry-kimarite').innerHTML =
+      renderKimBlock(`How ${nameA} wins`, kimA) + renderKimBlock(`How ${nameB} wins`, kimB);
+
+    // Match-by-match table
+    const cols = [
+      { key: 'basho_id', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
+      { key: 'day', label: 'Day', cls: 'muted-cell' },
+      { key: '__winner', label: 'Winner', cls: 'name-cell' },
+      { key: '__rank', label: 'Ranks', cls: 'muted-cell' },
+      { key: 'kimarite', label: 'Kimarite', cls: 'muted-cell' },
+    ];
+    const enriched = rows.map(m => ({
+      ...m,
+      __winner: m.winner_id === idA ? nameA : (m.winner_id === idB ? nameB : '—'),
+      __rank: `${m.east_rank || '—'} vs ${m.west_rank || '—'}`,
+    }));
+    renderTable('rivalry-matches-table', enriched, cols);
+  } catch(e) {
+    document.getElementById('rivalry-matches-table').textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function closeRivalryDetail() {
+  document.getElementById('rivalry-detail').style.display = 'none';
+}
+
+
 async function showTopOnChart(which) {
   const rows = tableData[which];
   if (!rows || !rows.length) { alert('Table not loaded yet'); return; }

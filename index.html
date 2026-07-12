@@ -1052,7 +1052,7 @@ async function fetchDistinctIds(filter) {
   while (true) {
     const to = from + pageSize - 1;
     const resp = await fetch(
-      `${sbUrl}/rest/v1/${sbTable}?${filter}&select=rikishi_id`,
+      `${sbUrl}/rest/v1/${sbTable}?${filter}&select=rikishi_id,basho&order=basho`,
       { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
                    Range: `${from}-${to}`, 'Range-Unit': 'items' } }
     );

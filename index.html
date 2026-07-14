@@ -678,7 +678,7 @@
       </div>
       <div class="search-wrap" style="max-width:260px;margin-left:auto">
         <input type="text" id="rivalry-search" placeholder="Filter by name…" autocomplete="off"
-          oninput="renderRivalryTable()" />
+          oninput="onRivalrySearchInput()" />
       </div>
     </div>
 
@@ -2008,74 +2008,76 @@ async function loadTables() {
 }
 
 // ─── Rivalry Explorer ─────────────────────────────────
-let rivalryData = [];     // all pairs from the `rivalries` table
+let rivalryData = [];          // rows currently displayed (not the whole table)
 let rivalrySort = 'matches';   // 'matches' | 'close'
+let rivalrySearchTimer = null;
+let rivalryRequestSeq = 0;     // guards against out-of-order responses
 const RIVALRY_DISPLAY_LIMIT = 200;
 
-async function loadRivalries() {
+const RIVALRY_SELECT =
+  'rikishi_a,rikishi_a_name,rikishi_b,rikishi_b_name,total_matches,a_wins,b_wins,win_diff_ratio,first_basho,last_basho';
+
+// Build and run the query server-side (sort + search + limit all applied by
+// Postgres) rather than pulling the whole table into the browser — the old
+// approach paginated through every pair ever recorded, which could take
+// minutes with thousands of rows.
+async function fetchAndRenderRivalries() {
   const el = document.getElementById('rivalry-table');
-  if (demoMode) { el.textContent = 'Rivalries require a database connection.'; return; }
-  rivalriesLoaded = true;
+  el.classList.add('table-loading');
+  el.textContent = 'Loading…';
+
+  const mySeq = ++rivalryRequestSeq;
+  const q = (document.getElementById('rivalry-search').value || '').trim();
+
+  let query = `rivalries?select=${RIVALRY_SELECT}`;
+  if (q) {
+    // escape commas/parens which would break PostgREST's or() syntax
+    const safe = q.replace(/[,()]/g, '');
+    query += `&or=(rikishi_a_name.ilike.*${safe}*,rikishi_b_name.ilike.*${safe}*)`;
+  }
+  if (rivalrySort === 'close') {
+    query += `&total_matches=gte.5&order=win_diff_ratio.asc,total_matches.desc`;
+  } else {
+    query += `&order=total_matches.desc`;
+  }
+  query += `&limit=${RIVALRY_DISPLAY_LIMIT}`;
 
   try {
-    // Paginate past Supabase's 1000-row cap — there can be many thousands
-    // of pairs. win_diff_ratio is precomputed in SQL (win_diff / total_matches)
-    // so Closest Record sorting doesn't need to recompute it client-side.
-    let rows = [];
-    let from = 0;
-    const pageSize = 1000;
-    while (true) {
-      const to = from + pageSize - 1;
-      const resp = await fetch(
-        `${sbUrl}/rest/v1/rivalries?select=rikishi_a,rikishi_a_name,rikishi_b,rikishi_b_name,total_matches,a_wins,b_wins,win_diff_ratio,first_basho,last_basho&order=total_matches.desc`,
-        { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
-                     Range: `${from}-${to}`, 'Range-Unit': 'items' } }
-      );
-      if (!resp.ok) throw new Error(`${resp.status}`);
-      const page = await resp.json();
-      if (!page.length) break;
-      rows.push(...page);
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
+    const rows = await sbSelect(query);
+    if (mySeq !== rivalryRequestSeq) return;   // a newer request has since superseded this one
     rivalryData = rows;
     renderRivalryTable();
   } catch(e) {
+    if (mySeq !== rivalryRequestSeq) return;
     el.textContent = 'Failed to load: ' + e.message;
   }
+}
+
+async function loadRivalries() {
+  if (demoMode) {
+    document.getElementById('rivalry-table').textContent = 'Rivalries require a database connection.';
+    return;
+  }
+  rivalriesLoaded = true;
+  await fetchAndRenderRivalries();
 }
 
 function setRivalrySort(mode, btn) {
   rivalrySort = mode;
   btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderRivalryTable();
+  fetchAndRenderRivalries();
+}
+
+// Debounce search input so typing doesn't fire a request per keystroke.
+function onRivalrySearchInput() {
+  clearTimeout(rivalrySearchTimer);
+  rivalrySearchTimer = setTimeout(fetchAndRenderRivalries, 300);
 }
 
 function renderRivalryTable() {
   const el = document.getElementById('rivalry-table');
-  if (!rivalryData.length) { el.textContent = 'No rivalry data found.'; return; }
-
-  const q = (document.getElementById('rivalry-search').value || '').trim().toLowerCase();
-  let rows = rivalryData;
-  if (q) {
-    rows = rows.filter(r =>
-      r.rikishi_a_name.toLowerCase().includes(q) ||
-      r.rikishi_b_name.toLowerCase().includes(q));
-  }
-
-  // "Closest record" = smallest win_diff as a FRACTION of matches played, so
-  // a 3-2 series doesn't outrank a genuinely contested 30-28 one. Require a
-  // reasonable sample (5+ matches) so one-off bouts don't dominate.
-  if (rivalrySort === 'close') {
-    rows = rows.filter(r => r.total_matches >= 5)
-               .slice()
-               .sort((a, b) => a.win_diff_ratio - b.win_diff_ratio || b.total_matches - a.total_matches);
-  } else {
-    rows = rows.slice().sort((a, b) => b.total_matches - a.total_matches);
-  }
-
-  rows = rows.slice(0, RIVALRY_DISPLAY_LIMIT);
+  if (!rivalryData.length) { el.classList.remove('table-loading'); el.textContent = 'No rivalry data found.'; return; }
 
   const head = `<tr>
     <th class="rank-num">#</th>
@@ -2085,7 +2087,7 @@ function renderRivalryTable() {
     <th class="muted-cell">Record (A–B)</th>
     <th class="muted-cell">Span</th>
   </tr>`;
-  const body = rows.map((r, i) => `
+  const body = rivalryData.map((r, i) => `
     <tr class="rivalry-row" onclick="showRivalryDetail(${r.rikishi_a}, ${r.rikishi_b})" style="cursor:pointer">
       <td class="rank-num">${i + 1}</td>
       <td class="name-cell">${r.rikishi_a_name}</td>

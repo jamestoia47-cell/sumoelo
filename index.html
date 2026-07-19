@@ -709,6 +709,18 @@
     <h2 style="margin-top:0">Kimarite Breakdown</h2>
     <div class="subtitle">Every winning technique on record, and how often it's been used</div>
 
+    <div style="margin:16px 0">
+      <label style="display:block;color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">Look up a rikishi's technique mix directly</label>
+      <div class="search-wrap" style="max-width:320px">
+        <input type="text" id="kimarite-rikishi-search" placeholder="Search name…" autocomplete="off"
+          oninput="onKimariteRikishiSearch(this.value)"
+          onfocus="showKimariteRikishiDropdown()"
+          onkeydown="onKimariteRikishiSearchKey(event)"
+        />
+        <div class="dropdown" id="kimarite-rikishi-dropdown"></div>
+      </div>
+    </div>
+
     <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
       <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
       <div class="toggle-group" id="kimarite-sort-toggle" style="display:inline-flex;width:auto">
@@ -733,15 +745,18 @@
       </div>
       <div class="subtitle" style="margin-bottom:8px">Click a wrestler to see their full technique mix</div>
       <div id="kimarite-wrestlers-table" class="table-loading">Loading…</div>
+    </div>
 
-      <div id="kimarite-wrestler-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
-        <button class="clear-btn" onclick="closeKimariteWrestlerDetail()" style="float:right">Close ✕</button>
-        <h3 id="kimarite-wrestler-title" style="margin-top:0;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase"></h3>
-        <div class="subtitle" id="kimarite-wrestler-subtitle" style="margin-bottom:16px"></div>
-        <div id="kimarite-wrestler-kvs" style="margin-bottom:20px"></div>
-        <div class="chart-container" style="height:420px;max-width:520px;margin:0 auto">
-          <canvas id="kimarite-wrestler-pie"></canvas>
-        </div>
+    <div id="kimarite-wrestler-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+      <button class="clear-btn" onclick="closeKimariteWrestlerDetail()" style="float:right">Close ✕</button>
+      <h3 id="kimarite-wrestler-title" style="margin-top:0;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase"></h3>
+      <div class="subtitle" id="kimarite-wrestler-subtitle" style="margin-bottom:16px"></div>
+      <div id="kimarite-wrestler-kvs" style="margin-bottom:20px"></div>
+      <div class="chart-container" style="height:420px;max-width:520px;margin:0 auto">
+        <canvas id="kimarite-wrestler-pie"></canvas>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="show-top-btn" onclick="addKimariteWrestlerToChart()">Add to Chart →</button>
       </div>
     </div>
   </div>
@@ -2233,6 +2248,7 @@ let kimariteSort = 'count';      // 'count' | 'name'
 let currentKimarite = null;      // which kimarite is currently drilled into
 let kimariteDetailSort = 'count';// 'count' | 'pct'
 let kimariteWrestlerChart = null;// Chart.js instance for the pie chart
+let currentWrestlerId = null;    // whichever wrestler's pie-chart panel is open
 
 function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -2363,6 +2379,7 @@ function closeKimariteDetail() {
 // Second-level drill-down: pick a wrestler from the top-50 list and show
 // their own full technique mix (across ALL their career wins) as a pie chart.
 async function showKimariteWrestlerDetail(rikishiId, rikishiName) {
+  currentWrestlerId = rikishiId;
   const panel = document.getElementById('kimarite-wrestler-detail');
   document.getElementById('kimarite-wrestler-title').textContent = rikishiName;
   document.getElementById('kimarite-wrestler-subtitle').textContent = 'Loading technique mix…';
@@ -2439,6 +2456,95 @@ function closeKimariteWrestlerDetail() {
   const panel = document.getElementById('kimarite-wrestler-detail');
   if (panel) panel.style.display = 'none';
   if (kimariteWrestlerChart) { kimariteWrestlerChart.destroy(); kimariteWrestlerChart = null; }
+}
+
+// ─── Direct rikishi search on the Kimarite page ───────
+// Skips the "pick a kimarite first" path entirely — search a name, jump
+// straight to their technique-mix panel. Uses the full rikishiList (unlike
+// the chart's own search box, this one does NOT exclude wrestlers already
+// on the chart — looking up their kimarite stats is independent of that).
+function kimariteSearchRikishi(query) {
+  const q = query.toLowerCase().trim();
+  const pool = rikishiList;
+  if (!q) {
+    return pool.slice().sort((a, b) =>
+      a.base_name.localeCompare(b.base_name) ||
+      (b.final_year || '').localeCompare(a.final_year || '')
+    );
+  }
+  const scored = [];
+  for (const r of pool) {
+    const name = r.base_name.toLowerCase();
+    let tier;
+    if (name.startsWith(q))    tier = 0;
+    else if (name.includes(q)) tier = 1;
+    else continue;
+    scored.push({ r, tier });
+  }
+  scored.sort((a, b) =>
+    a.tier - b.tier ||
+    a.r.base_name.localeCompare(b.r.base_name) ||
+    (b.r.final_year || '').localeCompare(a.r.final_year || '')
+  );
+  return scored.map(s => s.r);
+}
+
+function onKimariteRikishiSearch(val) {
+  renderKimariteRikishiDropdown(kimariteSearchRikishi(val));
+  document.getElementById('kimarite-rikishi-dropdown').classList.add('open');
+}
+
+// Pressing Enter jumps straight to the top match's technique-mix panel.
+function onKimariteRikishiSearchKey(e) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const val = document.getElementById('kimarite-rikishi-search').value;
+  const matches = kimariteSearchRikishi(val);
+  if (matches.length) selectKimariteRikishi(matches[0].id, matches[0].base_name);
+}
+
+function renderKimariteRikishiDropdown(list) {
+  const dd = document.getElementById('kimarite-rikishi-dropdown');
+  if (!list.length) {
+    dd.innerHTML = '<div class="dropdown-item" style="color:var(--muted)">No results</div>';
+    return;
+  }
+  dd.innerHTML = list.slice(0, 50).map(r => {
+    const yr = r.final_year ? `<span class="rank-badge">${r.final_year}</span>` : '';
+    return `<div class="dropdown-item" data-id="${escAttr(r.id)}" data-name="${escAttr(r.base_name)}">
+      ${r.base_name}${yr}
+    </div>`;
+  }).join('');
+  dd.querySelectorAll('div[data-id]').forEach(item => {
+    item.onclick = () => selectKimariteRikishi(item.dataset.id, item.dataset.name);
+  });
+}
+
+function showKimariteRikishiDropdown() {
+  renderKimariteRikishiDropdown(kimariteSearchRikishi(document.getElementById('kimarite-rikishi-search').value));
+  document.getElementById('kimarite-rikishi-dropdown').classList.add('open');
+}
+
+function selectKimariteRikishi(id, name) {
+  document.getElementById('kimarite-rikishi-search').value = '';
+  document.getElementById('kimarite-rikishi-dropdown').classList.remove('open');
+  showKimariteWrestlerDetail(id, name);
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('kimarite-rikishi-dropdown');
+  if (dd && !e.target.closest('#kimarite-rikishi-search') && !e.target.closest('#kimarite-rikishi-dropdown')) {
+    dd.classList.remove('open');
+  }
+});
+
+// Add the currently-open wrestler's series to the Chart page and jump there.
+// Switch pages FIRST so the chart canvas is visible before Chart.js draws to
+// it — drawing into a display:none canvas can leave it mis-sized.
+function addKimariteWrestlerToChart() {
+  if (!currentWrestlerId) return;
+  switchPage('chart');
+  addRikishi(currentWrestlerId);
 }
 
 // Load the top 10 rikishi from a given table onto the Chart page (rating view).

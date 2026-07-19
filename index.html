@@ -404,6 +404,12 @@
     body.show-rivalries main { display: none; }
     body.show-rivalries .config-bar .preset-buttons { display: none; }
 
+    /* Kimarite page */
+    #kimarite-page { display: none; }
+    body.show-kimarite #kimarite-page { display: block; }
+    body.show-kimarite main { display: none; }
+    body.show-kimarite .config-bar .preset-buttons { display: none; }
+
     .tables-wrap {
       padding: 24px 32px;
       max-width: 1100px;
@@ -526,6 +532,7 @@
     <button class="page-tab active" id="tab-chart"     onclick="switchPage('chart')">Chart</button>
     <button class="page-tab"        id="tab-tables"    onclick="switchPage('tables')">Tables</button>
     <button class="page-tab"        id="tab-rivalries" onclick="switchPage('rivalries')">Rivalries</button>
+    <button class="page-tab"        id="tab-kimarite"  onclick="switchPage('kimarite')">Kimarite</button>
   </nav>
 </header>
 
@@ -693,6 +700,49 @@
 
       <h3 style="color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Match History</h3>
       <div id="rivalry-matches-table" class="table-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<div id="kimarite-page">
+  <div class="tables-wrap">
+    <h2 style="margin-top:0">Kimarite Breakdown</h2>
+    <div class="subtitle">Every winning technique on record, and how often it's been used</div>
+
+    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
+      <div class="toggle-group" id="kimarite-sort-toggle" style="display:inline-flex;width:auto">
+        <button class="active" onclick="setKimariteSort('count', this)">Most Used</button>
+        <button onclick="setKimariteSort('name', this)">Name (A–Z)</button>
+      </div>
+    </div>
+
+    <div id="kimarite-table" class="table-loading">Loading…</div>
+
+    <div id="kimarite-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+      <button class="clear-btn" onclick="closeKimariteDetail()" style="float:right">Close ✕</button>
+      <h2 id="kimarite-detail-title" style="margin-top:0"></h2>
+      <div class="subtitle" id="kimarite-detail-subtitle"></div>
+
+      <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+        <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
+        <div class="toggle-group" id="kimarite-detail-sort-toggle" style="display:inline-flex;width:auto">
+          <button class="active" onclick="setKimariteDetailSort('count', this)">By Count</button>
+          <button onclick="setKimariteDetailSort('pct', this)">By Percentage</button>
+        </div>
+      </div>
+      <div class="subtitle" style="margin-bottom:8px">Click a wrestler to see their full technique mix</div>
+      <div id="kimarite-wrestlers-table" class="table-loading">Loading…</div>
+
+      <div id="kimarite-wrestler-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
+        <button class="clear-btn" onclick="closeKimariteWrestlerDetail()" style="float:right">Close ✕</button>
+        <h3 id="kimarite-wrestler-title" style="margin-top:0;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase"></h3>
+        <div class="subtitle" id="kimarite-wrestler-subtitle" style="margin-bottom:16px"></div>
+        <div id="kimarite-wrestler-kvs" style="margin-bottom:20px"></div>
+        <div class="chart-container" style="height:420px;max-width:520px;margin:0 auto">
+          <canvas id="kimarite-wrestler-pie"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1736,6 +1786,7 @@ function updateChart() {
 // ─── Tables page ──────────────────────────────────────
 let tablesLoaded = false;
 let rivalriesLoaded = false;
+let kimariteLoaded = false;
 let tableData = {};   // cached rows per table, incl. rikishi_id
 
 // Switch which table section is visible
@@ -1754,10 +1805,13 @@ function switchPage(page) {
   document.getElementById('tab-chart').classList.toggle('active', page === 'chart');
   document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
   document.getElementById('tab-rivalries').classList.toggle('active', page === 'rivalries');
+  document.getElementById('tab-kimarite').classList.toggle('active', page === 'kimarite');
   document.body.classList.toggle('show-tables', page === 'tables');
   document.body.classList.toggle('show-rivalries', page === 'rivalries');
+  document.body.classList.toggle('show-kimarite', page === 'kimarite');
   if (page === 'tables' && !tablesLoaded) loadTables();
   if (page === 'rivalries' && !rivalriesLoaded) loadRivalries();
+  if (page === 'kimarite' && !kimariteLoaded) loadKimarite();
 }
 
 async function sbSelect(path) {
@@ -2171,6 +2225,220 @@ async function showRivalryDetail(idA, idB) {
 
 function closeRivalryDetail() {
   document.getElementById('rivalry-detail').style.display = 'none';
+}
+
+// ─── Kimarite Breakdown ───────────────────────────────
+let kimariteData = [];           // [{kimarite, total_uses}] — small dataset, loaded once
+let kimariteSort = 'count';      // 'count' | 'name'
+let currentKimarite = null;      // which kimarite is currently drilled into
+let kimariteDetailSort = 'count';// 'count' | 'pct'
+let kimariteWrestlerChart = null;// Chart.js instance for the pie chart
+
+function escAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+async function loadKimarite() {
+  const el = document.getElementById('kimarite-table');
+  if (demoMode) { el.textContent = 'Kimarite stats require a database connection.'; return; }
+  kimariteLoaded = true;
+  try {
+    // Small dataset (a few dozen distinct techniques) — one query, no paging.
+    kimariteData = await sbSelect('kimarite_counts?select=kimarite,total_uses&order=total_uses.desc&limit=500');
+    renderKimariteTable();
+  } catch(e) {
+    el.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function setKimariteSort(mode, btn) {
+  kimariteSort = mode;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderKimariteTable();
+}
+
+function renderKimariteTable() {
+  const el = document.getElementById('kimarite-table');
+  if (!kimariteData.length) { el.classList.remove('table-loading'); el.textContent = 'No kimarite data found.'; return; }
+
+  const rows = kimariteData.slice().sort((a, b) =>
+    kimariteSort === 'name' ? a.kimarite.localeCompare(b.kimarite) : b.total_uses - a.total_uses);
+
+  const head = `<tr>
+    <th class="rank-num">#</th>
+    <th class="name-cell">Kimarite</th>
+    <th class="rating-cell">Times Used</th>
+  </tr>`;
+  const body = rows.map((r, i) => `
+    <tr class="rivalry-row" data-kimarite="${escAttr(r.kimarite)}" style="cursor:pointer">
+      <td class="rank-num">${i + 1}</td>
+      <td class="name-cell">${r.kimarite}</td>
+      <td class="rating-cell">${r.total_uses.toLocaleString()}</td>
+    </tr>`).join('');
+
+  el.classList.remove('table-loading');
+  el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  el.querySelectorAll('tr[data-kimarite]').forEach(tr => {
+    tr.onclick = () => showKimariteDetail(tr.dataset.kimarite);
+  });
+}
+
+// Drill down into one kimarite: top 50 wrestlers who won that way.
+async function showKimariteDetail(kimarite) {
+  currentKimarite = kimarite;
+  kimariteDetailSort = 'count';
+  const toggle = document.getElementById('kimarite-detail-sort-toggle');
+  if (toggle) toggle.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', i === 0));
+
+  closeKimariteWrestlerDetail();   // reset any nested pie-chart panel from a previous kimarite
+
+  const meta = kimariteData.find(k => k.kimarite === kimarite);
+  document.getElementById('kimarite-detail-title').textContent = kimarite;
+  document.getElementById('kimarite-detail-subtitle').textContent =
+    meta ? `${meta.total_uses.toLocaleString()} total wins recorded` : '';
+
+  const detail = document.getElementById('kimarite-detail');
+  detail.style.display = '';
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  await fetchAndRenderKimariteWrestlers();
+}
+
+async function fetchAndRenderKimariteWrestlers() {
+  const el = document.getElementById('kimarite-wrestlers-table');
+  el.classList.add('table-loading');
+  el.textContent = 'Loading…';
+
+  const select = 'rikishi_id,rikishi_name,uses,total_wins,pct_of_wins';
+  // "By Percentage" needs a minimum sample so a wrestler with 1 win via this
+  // kimarite (and only 1 win ever) doesn't show up as a meaningless 100%.
+  const query = (kimariteDetailSort === 'pct')
+    ? `kimarite_by_wrestler?kimarite=eq.${encodeURIComponent(currentKimarite)}&select=${select}&total_wins=gte.5&order=pct_of_wins.desc,uses.desc&limit=50`
+    : `kimarite_by_wrestler?kimarite=eq.${encodeURIComponent(currentKimarite)}&select=${select}&order=uses.desc&limit=50`;
+
+  try {
+    const rows = await sbSelect(query);
+    if (!rows.length) { el.classList.remove('table-loading'); el.textContent = 'No wrestler data found.'; return; }
+
+    const head = `<tr>
+      <th class="rank-num">#</th>
+      <th class="name-cell">Rikishi</th>
+      <th class="rating-cell">Uses</th>
+      <th class="muted-cell">Total Wins</th>
+      <th class="muted-cell">% of Wins</th>
+    </tr>`;
+    const body = rows.map((r, i) => `
+      <tr class="rivalry-row" data-rikishi-id="${r.rikishi_id}" data-rikishi-name="${escAttr(r.rikishi_name)}" style="cursor:pointer">
+        <td class="rank-num">${i + 1}</td>
+        <td class="name-cell">${r.rikishi_name}</td>
+        <td class="rating-cell">${r.uses}</td>
+        <td class="muted-cell">${r.total_wins}</td>
+        <td class="muted-cell">${r.pct_of_wins}%</td>
+      </tr>`).join('');
+
+    el.classList.remove('table-loading');
+    el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    el.querySelectorAll('tr[data-rikishi-id]').forEach(tr => {
+      tr.onclick = () => showKimariteWrestlerDetail(tr.dataset.rikishiId, tr.dataset.rikishiName);
+    });
+  } catch(e) {
+    el.classList.remove('table-loading');
+    el.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function setKimariteDetailSort(mode, btn) {
+  kimariteDetailSort = mode;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  fetchAndRenderKimariteWrestlers();
+}
+
+function closeKimariteDetail() {
+  document.getElementById('kimarite-detail').style.display = 'none';
+  closeKimariteWrestlerDetail();
+}
+
+// Second-level drill-down: pick a wrestler from the top-50 list and show
+// their own full technique mix (across ALL their career wins) as a pie chart.
+async function showKimariteWrestlerDetail(rikishiId, rikishiName) {
+  const panel = document.getElementById('kimarite-wrestler-detail');
+  document.getElementById('kimarite-wrestler-title').textContent = rikishiName;
+  document.getElementById('kimarite-wrestler-subtitle').textContent = 'Loading technique mix…';
+  document.getElementById('kimarite-wrestler-kvs').innerHTML = '';
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const [rows, kvsRows] = await Promise.all([
+      sbSelect(`kimarite_by_wrestler?rikishi_id=eq.${rikishiId}&select=kimarite,uses,pct_of_wins,total_wins&order=uses.desc&limit=50`),
+      sbSelect(`kimarite_variety_score?rikishi_id=eq.${rikishiId}&select=kvs&limit=1`),
+    ]);
+    if (!rows.length) {
+      document.getElementById('kimarite-wrestler-subtitle').textContent = 'No technique data found.';
+      return;
+    }
+
+    const totalWins = rows[0].total_wins;
+    document.getElementById('kimarite-wrestler-subtitle').textContent =
+      `${totalWins.toLocaleString()} career wins, by technique`;
+
+    // Kimarite Variety Score: sum of how far ABOVE the population average
+    // this wrestler sits on each technique (never negative per-technique),
+    // excluding fusen/yorikiri/oshidashi and the non-technique fall/step-out
+    // outcomes. A wrestler with no qualifying wins has no row at all.
+    const kvs = kvsRows.length ? kvsRows[0].kvs : 0;
+    document.getElementById('kimarite-wrestler-kvs').innerHTML = `
+      <div style="display:inline-flex;align-items:baseline;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px">
+        <span style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Kimarite Variety Score</span>
+        <span style="color:var(--accent);font-weight:600;font-size:18px;font-family:'DM Mono',monospace">${kvs}</span>
+      </div>`;
+
+    // Group the long tail beyond the top 7 into "Other" so the pie stays readable.
+    const TOP_N = 7;
+    let slices = rows.slice(0, TOP_N).map(r => ({ label: r.kimarite, value: r.pct_of_wins }));
+    if (rows.length > TOP_N) {
+      const otherPct = rows.slice(TOP_N).reduce((sum, r) => sum + r.pct_of_wins, 0);
+      if (otherPct > 0) slices.push({ label: 'Other', value: Math.round(otherPct * 10) / 10 });
+    }
+
+    const ctx = document.getElementById('kimarite-wrestler-pie').getContext('2d');
+    if (kimariteWrestlerChart) { kimariteWrestlerChart.destroy(); kimariteWrestlerChart = null; }
+    kimariteWrestlerChart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: slices.map(s => s.label),
+        datasets: [{
+          data: slices.map(s => s.value),
+          backgroundColor: slices.map((_, i) => seriesColor(i, slices.length)),
+          borderColor: '#12100c',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: { color: '#c9c2b4', font: { family: "'DM Mono', monospace", size: 11 } },
+          },
+          tooltip: {
+            callbacks: { label: (item) => `${item.label}: ${item.parsed}%` },
+          },
+        },
+      },
+    });
+  } catch(e) {
+    document.getElementById('kimarite-wrestler-subtitle').textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+function closeKimariteWrestlerDetail() {
+  const panel = document.getElementById('kimarite-wrestler-detail');
+  if (panel) panel.style.display = 'none';
+  if (kimariteWrestlerChart) { kimariteWrestlerChart.destroy(); kimariteWrestlerChart = null; }
 }
 
 // Load the top 10 rikishi from a given table onto the Chart page (rating view).

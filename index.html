@@ -410,6 +410,12 @@
     body.show-kimarite main { display: none; }
     body.show-kimarite .config-bar .preset-buttons { display: none; }
 
+    /* Leaderboard page */
+    #leaderboard-page { display: none; }
+    body.show-leaderboard #leaderboard-page { display: block; }
+    body.show-leaderboard main { display: none; }
+    body.show-leaderboard .config-bar .preset-buttons { display: none; }
+
     .tables-wrap {
       padding: 24px 32px;
       max-width: 1100px;
@@ -529,10 +535,11 @@
   <h1>相撲 Tracker</h1>
   <span>Rikishi Performance Analysis</span>
   <nav class="page-tabs">
-    <button class="page-tab active" id="tab-chart"     onclick="switchPage('chart')">Chart</button>
-    <button class="page-tab"        id="tab-tables"    onclick="switchPage('tables')">Tables</button>
-    <button class="page-tab"        id="tab-rivalries" onclick="switchPage('rivalries')">Rivalries</button>
-    <button class="page-tab"        id="tab-kimarite"  onclick="switchPage('kimarite')">Kimarite</button>
+    <button class="page-tab active" id="tab-chart"       onclick="switchPage('chart')">Chart</button>
+    <button class="page-tab"        id="tab-tables"      onclick="switchPage('tables')">Tables</button>
+    <button class="page-tab"        id="tab-rivalries"   onclick="switchPage('rivalries')">Rivalries</button>
+    <button class="page-tab"        id="tab-kimarite"    onclick="switchPage('kimarite')">Kimarite</button>
+    <button class="page-tab"        id="tab-leaderboard" onclick="switchPage('leaderboard')">Leaderboard</button>
   </nav>
 </header>
 
@@ -759,6 +766,14 @@
         <button class="show-top-btn" onclick="addKimariteWrestlerToChart()">Add to Chart →</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="leaderboard-page">
+  <div class="tables-wrap">
+    <h2 style="margin-top:0">Leaderboard</h2>
+    <div class="subtitle">Top 100 rikishi by Legacy Score — a composite of career rating, average rank, and technique variety</div>
+    <div id="leaderboard-table" class="table-loading">Loading…</div>
   </div>
 </div>
 
@@ -997,7 +1012,7 @@ function generateDemoData() {
 // ─── Supabase Connection ──────────────────────────────
 // Credentials are hardcoded — replace with your own values.
 const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs';                 // ← your anon key
+const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs'; 
 const SB_TABLE = 'results_1970';                       // ← view name (1970+ only, matches what the chart can actually plot)
 
 let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
@@ -1802,6 +1817,7 @@ function updateChart() {
 let tablesLoaded = false;
 let rivalriesLoaded = false;
 let kimariteLoaded = false;
+let leaderboardLoaded = false;
 let tableData = {};   // cached rows per table, incl. rikishi_id
 
 // Switch which table section is visible
@@ -1821,12 +1837,15 @@ function switchPage(page) {
   document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
   document.getElementById('tab-rivalries').classList.toggle('active', page === 'rivalries');
   document.getElementById('tab-kimarite').classList.toggle('active', page === 'kimarite');
+  document.getElementById('tab-leaderboard').classList.toggle('active', page === 'leaderboard');
   document.body.classList.toggle('show-tables', page === 'tables');
   document.body.classList.toggle('show-rivalries', page === 'rivalries');
   document.body.classList.toggle('show-kimarite', page === 'kimarite');
+  document.body.classList.toggle('show-leaderboard', page === 'leaderboard');
   if (page === 'tables' && !tablesLoaded) loadTables();
   if (page === 'rivalries' && !rivalriesLoaded) loadRivalries();
   if (page === 'kimarite' && !kimariteLoaded) loadKimarite();
+  if (page === 'leaderboard' && !leaderboardLoaded) loadLeaderboard();
 }
 
 async function sbSelect(path) {
@@ -2545,6 +2564,31 @@ function addKimariteWrestlerToChart() {
   if (!currentWrestlerId) return;
   switchPage('chart');
   addRikishi(currentWrestlerId);
+}
+
+// ─── Leaderboard ───────────────────────────────────────
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-table');
+  if (demoMode) { el.textContent = 'Leaderboard requires a database connection.'; return; }
+  leaderboardLoaded = true;
+
+  try {
+    const rows = await sbSelect(
+      'leaderboard?select=rikishi_id,rikishi_name,total_elo,avg_rank,kvs,legacy_score' +
+      '&order=legacy_score.desc&limit=100'
+    );
+    const cols = [
+      { key: '__idx', label: '#', cls: 'rank-num' },
+      { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
+      { key: 'total_elo', label: 'Total Elo', cls: 'rating-cell', fmt: v => Number(v).toLocaleString() },
+      { key: 'avg_rank', label: 'Average Rank', cls: 'muted-cell', fmt: v => Number(v).toFixed(2) },
+      { key: 'kvs', label: 'Kimarite Variety Score', cls: 'muted-cell', fmt: v => Number(v).toFixed(1) },
+      { key: 'legacy_score', label: 'Legacy Score', cls: 'rating-cell', fmt: v => Number(v).toLocaleString() },
+    ];
+    renderTable('leaderboard-table', rows, cols);
+  } catch(e) {
+    el.textContent = 'Failed to load: ' + e.message;
+  }
 }
 
 // Load the top 10 rikishi from a given table onto the Chart page (rating view).

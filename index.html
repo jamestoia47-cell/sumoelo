@@ -398,18 +398,6 @@
     body.show-tables main { display: none; }
     body.show-tables .config-bar .preset-buttons { display: none; }
 
-    /* Rivalries page */
-    #rivalries-page { display: none; }
-    body.show-rivalries #rivalries-page { display: block; }
-    body.show-rivalries main { display: none; }
-    body.show-rivalries .config-bar .preset-buttons { display: none; }
-
-    /* Kimarite page */
-    #kimarite-page { display: none; }
-    body.show-kimarite #kimarite-page { display: block; }
-    body.show-kimarite main { display: none; }
-    body.show-kimarite .config-bar .preset-buttons { display: none; }
-
     /* Leaderboard page */
     #leaderboard-page { display: none; }
     body.show-leaderboard #leaderboard-page { display: block; }
@@ -537,8 +525,6 @@
   <nav class="page-tabs">
     <button class="page-tab active" id="tab-chart"       onclick="switchPage('chart')">Chart</button>
     <button class="page-tab"        id="tab-tables"      onclick="switchPage('tables')">Tables</button>
-    <button class="page-tab"        id="tab-rivalries"   onclick="switchPage('rivalries')">Rivalries</button>
-    <button class="page-tab"        id="tab-kimarite"    onclick="switchPage('kimarite')">Kimarite</button>
     <button class="page-tab"        id="tab-leaderboard" onclick="switchPage('leaderboard')">Leaderboard</button>
   </nav>
 </header>
@@ -679,100 +665,19 @@
   </div>
 </div>
 
-<div id="rivalries-page">
-  <div class="tables-wrap">
-    <h2 style="margin-top:0">Rivalry Explorer</h2>
-    <div class="subtitle">Head-to-head records between every pair of wrestlers who have ever met</div>
-
-    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
-      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
-      <div class="toggle-group" id="rivalry-sort-toggle" style="display:inline-flex;width:auto">
-        <button class="active" onclick="setRivalrySort('matches', this)">Most Matches</button>
-        <button onclick="setRivalrySort('close', this)">Closest Record</button>
-      </div>
-      <div class="search-wrap" style="max-width:260px;margin-left:auto">
-        <input type="text" id="rivalry-search" placeholder="Filter by name…" autocomplete="off"
-          oninput="onRivalrySearchInput()" />
-      </div>
-    </div>
-
-    <div id="rivalry-table" class="table-loading">Loading…</div>
-
-    <div id="rivalry-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
-      <button class="clear-btn" onclick="closeRivalryDetail()" style="float:right">Close ✕</button>
-      <h2 id="rivalry-detail-title" style="margin-top:0"></h2>
-      <div class="subtitle" id="rivalry-detail-subtitle"></div>
-
-      <div id="rivalry-kimarite" style="display:flex;gap:32px;flex-wrap:wrap;margin:20px 0"></div>
-
-      <h3 style="color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Match History</h3>
-      <div id="rivalry-matches-table" class="table-loading">Loading…</div>
-    </div>
-  </div>
-</div>
-
-<div id="kimarite-page">
-  <div class="tables-wrap">
-    <h2 style="margin-top:0">Kimarite Breakdown</h2>
-    <div class="subtitle">Every winning technique on record, and how often it's been used</div>
-
-    <div style="margin:16px 0">
-      <label style="display:block;color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">Look up a rikishi's technique mix directly</label>
-      <div class="search-wrap" style="max-width:320px">
-        <input type="text" id="kimarite-rikishi-search" placeholder="Search name…" autocomplete="off"
-          oninput="onKimariteRikishiSearch(this.value)"
-          onfocus="showKimariteRikishiDropdown()"
-          onkeydown="onKimariteRikishiSearchKey(event)"
-        />
-        <div class="dropdown" id="kimarite-rikishi-dropdown"></div>
-      </div>
-    </div>
-
-    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
-      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
-      <div class="toggle-group" id="kimarite-sort-toggle" style="display:inline-flex;width:auto">
-        <button class="active" onclick="setKimariteSort('count', this)">Most Used</button>
-        <button onclick="setKimariteSort('name', this)">Name (A–Z)</button>
-      </div>
-    </div>
-
-    <div id="kimarite-table" class="table-loading">Loading…</div>
-
-    <div id="kimarite-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
-      <button class="clear-btn" onclick="closeKimariteDetail()" style="float:right">Close ✕</button>
-      <h2 id="kimarite-detail-title" style="margin-top:0"></h2>
-      <div class="subtitle" id="kimarite-detail-subtitle"></div>
-
-      <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
-        <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Sort by:</span>
-        <div class="toggle-group" id="kimarite-detail-sort-toggle" style="display:inline-flex;width:auto">
-          <button class="active" onclick="setKimariteDetailSort('count', this)">By Count</button>
-          <button onclick="setKimariteDetailSort('pct', this)">By Percentage</button>
-        </div>
-      </div>
-      <div class="subtitle" style="margin-bottom:8px">Click a wrestler to see their full technique mix</div>
-      <div id="kimarite-wrestlers-table" class="table-loading">Loading…</div>
-    </div>
-
-    <div id="kimarite-wrestler-detail" style="display:none;margin-top:32px;border-top:1px solid var(--border);padding-top:24px">
-      <button class="clear-btn" onclick="closeKimariteWrestlerDetail()" style="float:right">Close ✕</button>
-      <h3 id="kimarite-wrestler-title" style="margin-top:0;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase"></h3>
-      <div class="subtitle" id="kimarite-wrestler-subtitle" style="margin-bottom:16px"></div>
-      <div id="kimarite-wrestler-kvs" style="margin-bottom:20px"></div>
-      <div class="chart-container" style="height:420px;max-width:520px;margin:0 auto">
-        <canvas id="kimarite-wrestler-pie"></canvas>
-      </div>
-      <div style="text-align:center;margin-top:20px">
-        <button class="show-top-btn" onclick="addKimariteWrestlerToChart()">Add to Chart →</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div id="leaderboard-page">
   <div class="tables-wrap">
     <h2 style="margin-top:0">Leaderboard</h2>
-    <div class="subtitle">Top 100 rikishi by Legacy Score — a composite of career rating, average rank, and technique variety</div>
+    <div class="subtitle">Top 100 rikishi by Total Elo — summed era-adjusted rating across every basho at Makushita rank or higher</div>
+
+    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Show:</span>
+      <div class="toggle-group" id="leaderboard-active-toggle" style="display:inline-flex;width:auto">
+        <button class="active" onclick="setLeaderboardActive(false, this)">All-Time</button>
+        <button onclick="setLeaderboardActive(true, this)">Currently Active</button>
+      </div>
+    </div>
+
     <div id="leaderboard-table" class="table-loading">Loading…</div>
   </div>
 </div>
@@ -1012,7 +917,7 @@ function generateDemoData() {
 // ─── Supabase Connection ──────────────────────────────
 // Credentials are hardcoded — replace with your own values.
 const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs'; 
+const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs';                 // ← your anon key
 const SB_TABLE = 'results_1970';                       // ← view name (1970+ only, matches what the chart can actually plot)
 
 let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
@@ -1815,8 +1720,6 @@ function updateChart() {
 
 // ─── Tables page ──────────────────────────────────────
 let tablesLoaded = false;
-let rivalriesLoaded = false;
-let kimariteLoaded = false;
 let leaderboardLoaded = false;
 let tableData = {};   // cached rows per table, incl. rikishi_id
 
@@ -1835,16 +1738,10 @@ function showTable(which, btn) {
 function switchPage(page) {
   document.getElementById('tab-chart').classList.toggle('active', page === 'chart');
   document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
-  document.getElementById('tab-rivalries').classList.toggle('active', page === 'rivalries');
-  document.getElementById('tab-kimarite').classList.toggle('active', page === 'kimarite');
   document.getElementById('tab-leaderboard').classList.toggle('active', page === 'leaderboard');
   document.body.classList.toggle('show-tables', page === 'tables');
-  document.body.classList.toggle('show-rivalries', page === 'rivalries');
-  document.body.classList.toggle('show-kimarite', page === 'kimarite');
   document.body.classList.toggle('show-leaderboard', page === 'leaderboard');
   if (page === 'tables' && !tablesLoaded) loadTables();
-  if (page === 'rivalries' && !rivalriesLoaded) loadRivalries();
-  if (page === 'kimarite' && !kimariteLoaded) loadKimarite();
   if (page === 'leaderboard' && !leaderboardLoaded) loadLeaderboard();
 }
 
@@ -2095,498 +1992,40 @@ async function loadTables() {
   }
 }
 
-// ─── Rivalry Explorer ─────────────────────────────────
-let rivalryData = [];          // rows currently displayed (not the whole table)
-let rivalrySort = 'matches';   // 'matches' | 'close'
-let rivalrySearchTimer = null;
-let rivalryRequestSeq = 0;     // guards against out-of-order responses
-const RIVALRY_DISPLAY_LIMIT = 200;
-
-const RIVALRY_SELECT =
-  'rikishi_a,rikishi_a_name,rikishi_b,rikishi_b_name,total_matches,a_wins,b_wins,win_diff_ratio,first_basho,last_basho';
-
-// Build and run the query server-side (sort + search + limit all applied by
-// Postgres) rather than pulling the whole table into the browser — the old
-// approach paginated through every pair ever recorded, which could take
-// minutes with thousands of rows.
-async function fetchAndRenderRivalries() {
-  const el = document.getElementById('rivalry-table');
-  el.classList.add('table-loading');
-  el.textContent = 'Loading…';
-
-  const mySeq = ++rivalryRequestSeq;
-  const q = (document.getElementById('rivalry-search').value || '').trim();
-
-  let query = `rivalries?select=${RIVALRY_SELECT}`;
-  if (q) {
-    // escape commas/parens which would break PostgREST's or() syntax
-    const safe = q.replace(/[,()]/g, '');
-    query += `&or=(rikishi_a_name.ilike.*${safe}*,rikishi_b_name.ilike.*${safe}*)`;
-  }
-  if (rivalrySort === 'close') {
-    query += `&total_matches=gte.5&order=win_diff_ratio.asc,total_matches.desc`;
-  } else {
-    query += `&order=total_matches.desc`;
-  }
-  query += `&limit=${RIVALRY_DISPLAY_LIMIT}`;
-
-  try {
-    const rows = await sbSelect(query);
-    if (mySeq !== rivalryRequestSeq) return;   // a newer request has since superseded this one
-    rivalryData = rows;
-    renderRivalryTable();
-  } catch(e) {
-    if (mySeq !== rivalryRequestSeq) return;
-    el.textContent = 'Failed to load: ' + e.message;
-  }
-}
-
-async function loadRivalries() {
-  if (demoMode) {
-    document.getElementById('rivalry-table').textContent = 'Rivalries require a database connection.';
-    return;
-  }
-  rivalriesLoaded = true;
-  await fetchAndRenderRivalries();
-}
-
-function setRivalrySort(mode, btn) {
-  rivalrySort = mode;
-  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  fetchAndRenderRivalries();
-}
-
-// Debounce search input so typing doesn't fire a request per keystroke.
-function onRivalrySearchInput() {
-  clearTimeout(rivalrySearchTimer);
-  rivalrySearchTimer = setTimeout(fetchAndRenderRivalries, 300);
-}
-
-function renderRivalryTable() {
-  const el = document.getElementById('rivalry-table');
-  if (!rivalryData.length) { el.classList.remove('table-loading'); el.textContent = 'No rivalry data found.'; return; }
-
-  const head = `<tr>
-    <th class="rank-num">#</th>
-    <th class="name-cell">Rikishi A</th>
-    <th class="name-cell">Rikishi B</th>
-    <th class="rating-cell">Total Matches</th>
-    <th class="muted-cell">Record (A–B)</th>
-    <th class="muted-cell">Span</th>
-  </tr>`;
-  const body = rivalryData.map((r, i) => `
-    <tr class="rivalry-row" onclick="showRivalryDetail(${r.rikishi_a}, ${r.rikishi_b})" style="cursor:pointer">
-      <td class="rank-num">${i + 1}</td>
-      <td class="name-cell">${r.rikishi_a_name}</td>
-      <td class="name-cell">${r.rikishi_b_name}</td>
-      <td class="rating-cell">${r.total_matches}</td>
-      <td class="muted-cell">${r.a_wins}–${r.b_wins}</td>
-      <td class="muted-cell">${fmtBasho(r.first_basho)} – ${fmtBasho(r.last_basho)}</td>
-    </tr>`).join('');
-
-  el.classList.remove('table-loading');
-  el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
-}
-
-// Show the full match history + kimarite breakdown for one pair.
-async function showRivalryDetail(idA, idB) {
-  const pair = rivalryData.find(r =>
-    (r.rikishi_a === idA && r.rikishi_b === idB) ||
-    (r.rikishi_a === idB && r.rikishi_b === idA));
-  if (!pair) return;
-
-  const detail = document.getElementById('rivalry-detail');
-  const nameA = pair.rikishi_a_name, nameB = pair.rikishi_b_name;
-  document.getElementById('rivalry-detail-title').textContent = `${nameA} vs ${nameB}`;
-  document.getElementById('rivalry-detail-subtitle').textContent =
-    `${pair.total_matches} meetings · ${pair.a_wins}–${pair.b_wins} · ${fmtBasho(pair.first_basho)} – ${fmtBasho(pair.last_basho)}`;
-  document.getElementById('rivalry-kimarite').innerHTML = '';
-  document.getElementById('rivalry-matches-table').classList.add('table-loading');
-  document.getElementById('rivalry-matches-table').textContent = 'Loading…';
-  detail.style.display = '';
-  // 'nearest' scrolls the minimum amount needed to bring the panel into
-  // view, rather than snapping it flush to the very top of the viewport
-  // (which — with no sticky header to stop it — could scroll straight past
-  // the page's own header, making the detail look like it had "jumped"
-  // above the normal page content instead of opening in place).
-  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  try {
-    const rows = await sbSelect(
-      `matches?or=(and(east_id.eq.${idA},west_id.eq.${idB}),and(east_id.eq.${idB},west_id.eq.${idA}))` +
-      `&select=basho_id,day,east_id,west_id,east_rank,west_rank,kimarite,winner_id` +
-      `&order=basho_id.desc,day.desc&limit=1000`
-    );
-
-    // Kimarite tally per winner
-    const kimA = {}, kimB = {};
-    rows.forEach(m => {
-      if (!m.kimarite) return;
-      const bucket = (m.winner_id === idA) ? kimA : (m.winner_id === idB ? kimB : null);
-      if (!bucket) return;
-      bucket[m.kimarite] = (bucket[m.kimarite] || 0) + 1;
-    });
-    const topKimarite = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-    const renderKimBlock = (title, obj) => {
-      const entries = topKimarite(obj);
-      if (!entries.length) return `<div style="flex:1;min-width:200px"><h4 style="margin:0 0 8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.06em">${title}</h4><p class="subtitle" style="margin:0">No wins recorded</p></div>`;
-      const items = entries.map(([k, n]) => `<li>${k} <span class="muted-cell">×${n}</span></li>`).join('');
-      return `<div style="flex:1;min-width:200px"><h4 style="margin:0 0 8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.06em">${title}</h4><ul style="margin:0;padding-left:18px;line-height:1.7">${items}</ul></div>`;
-    };
-    document.getElementById('rivalry-kimarite').innerHTML =
-      renderKimBlock(`How ${nameA} wins`, kimA) + renderKimBlock(`How ${nameB} wins`, kimB);
-
-    // Match-by-match table
-    const cols = [
-      { key: 'basho_id', label: 'Basho', cls: 'muted-cell', fmt: fmtBasho },
-      { key: 'day', label: 'Day', cls: 'muted-cell' },
-      { key: '__winner', label: 'Winner', cls: 'name-cell' },
-      { key: '__rank', label: 'Ranks', cls: 'muted-cell' },
-      { key: 'kimarite', label: 'Kimarite', cls: 'muted-cell' },
-    ];
-    const enriched = rows.map(m => ({
-      ...m,
-      __winner: m.winner_id === idA ? nameA : (m.winner_id === idB ? nameB : '—'),
-      __rank: `${m.east_rank || '—'} vs ${m.west_rank || '—'}`,
-    }));
-    renderTable('rivalry-matches-table', enriched, cols);
-  } catch(e) {
-    document.getElementById('rivalry-matches-table').textContent = 'Failed to load: ' + e.message;
-  }
-}
-
-function closeRivalryDetail() {
-  document.getElementById('rivalry-detail').style.display = 'none';
-}
-
-// ─── Kimarite Breakdown ───────────────────────────────
-let kimariteData = [];           // [{kimarite, total_uses}] — small dataset, loaded once
-let kimariteSort = 'count';      // 'count' | 'name'
-let currentKimarite = null;      // which kimarite is currently drilled into
-let kimariteDetailSort = 'count';// 'count' | 'pct'
-let kimariteWrestlerChart = null;// Chart.js instance for the pie chart
-let currentWrestlerId = null;    // whichever wrestler's pie-chart panel is open
-
-function escAttr(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
-async function loadKimarite() {
-  const el = document.getElementById('kimarite-table');
-  if (demoMode) { el.textContent = 'Kimarite stats require a database connection.'; return; }
-  kimariteLoaded = true;
-  try {
-    // Small dataset (a few dozen distinct techniques) — one query, no paging.
-    kimariteData = await sbSelect('kimarite_counts?select=kimarite,total_uses&order=total_uses.desc&limit=500');
-    renderKimariteTable();
-  } catch(e) {
-    el.textContent = 'Failed to load: ' + e.message;
-  }
-}
-
-function setKimariteSort(mode, btn) {
-  kimariteSort = mode;
-  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderKimariteTable();
-}
-
-function renderKimariteTable() {
-  const el = document.getElementById('kimarite-table');
-  if (!kimariteData.length) { el.classList.remove('table-loading'); el.textContent = 'No kimarite data found.'; return; }
-
-  const rows = kimariteData.slice().sort((a, b) =>
-    kimariteSort === 'name' ? a.kimarite.localeCompare(b.kimarite) : b.total_uses - a.total_uses);
-
-  const head = `<tr>
-    <th class="rank-num">#</th>
-    <th class="name-cell">Kimarite</th>
-    <th class="rating-cell">Times Used</th>
-  </tr>`;
-  const body = rows.map((r, i) => `
-    <tr class="rivalry-row" data-kimarite="${escAttr(r.kimarite)}" style="cursor:pointer">
-      <td class="rank-num">${i + 1}</td>
-      <td class="name-cell">${r.kimarite}</td>
-      <td class="rating-cell">${r.total_uses.toLocaleString()}</td>
-    </tr>`).join('');
-
-  el.classList.remove('table-loading');
-  el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
-  el.querySelectorAll('tr[data-kimarite]').forEach(tr => {
-    tr.onclick = () => showKimariteDetail(tr.dataset.kimarite);
-  });
-}
-
-// Drill down into one kimarite: top 50 wrestlers who won that way.
-async function showKimariteDetail(kimarite) {
-  currentKimarite = kimarite;
-  kimariteDetailSort = 'count';
-  const toggle = document.getElementById('kimarite-detail-sort-toggle');
-  if (toggle) toggle.querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', i === 0));
-
-  closeKimariteWrestlerDetail();   // reset any nested pie-chart panel from a previous kimarite
-
-  const meta = kimariteData.find(k => k.kimarite === kimarite);
-  document.getElementById('kimarite-detail-title').textContent = kimarite;
-  document.getElementById('kimarite-detail-subtitle').textContent =
-    meta ? `${meta.total_uses.toLocaleString()} total wins recorded` : '';
-
-  const detail = document.getElementById('kimarite-detail');
-  detail.style.display = '';
-  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  await fetchAndRenderKimariteWrestlers();
-}
-
-async function fetchAndRenderKimariteWrestlers() {
-  const el = document.getElementById('kimarite-wrestlers-table');
-  el.classList.add('table-loading');
-  el.textContent = 'Loading…';
-
-  const select = 'rikishi_id,rikishi_name,uses,total_wins,pct_of_wins';
-  // "By Percentage" needs a minimum sample so a wrestler with 1 win via this
-  // kimarite (and only 1 win ever) doesn't show up as a meaningless 100%.
-  const query = (kimariteDetailSort === 'pct')
-    ? `kimarite_by_wrestler?kimarite=eq.${encodeURIComponent(currentKimarite)}&select=${select}&total_wins=gte.5&order=pct_of_wins.desc,uses.desc&limit=50`
-    : `kimarite_by_wrestler?kimarite=eq.${encodeURIComponent(currentKimarite)}&select=${select}&order=uses.desc&limit=50`;
-
-  try {
-    const rows = await sbSelect(query);
-    if (!rows.length) { el.classList.remove('table-loading'); el.textContent = 'No wrestler data found.'; return; }
-
-    const head = `<tr>
-      <th class="rank-num">#</th>
-      <th class="name-cell">Rikishi</th>
-      <th class="rating-cell">Uses</th>
-      <th class="muted-cell">Total Wins</th>
-      <th class="muted-cell">% of Wins</th>
-    </tr>`;
-    const body = rows.map((r, i) => `
-      <tr class="rivalry-row" data-rikishi-id="${r.rikishi_id}" data-rikishi-name="${escAttr(r.rikishi_name)}" style="cursor:pointer">
-        <td class="rank-num">${i + 1}</td>
-        <td class="name-cell">${r.rikishi_name}</td>
-        <td class="rating-cell">${r.uses}</td>
-        <td class="muted-cell">${r.total_wins}</td>
-        <td class="muted-cell">${r.pct_of_wins}%</td>
-      </tr>`).join('');
-
-    el.classList.remove('table-loading');
-    el.innerHTML = `<table class="data-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
-    el.querySelectorAll('tr[data-rikishi-id]').forEach(tr => {
-      tr.onclick = () => showKimariteWrestlerDetail(tr.dataset.rikishiId, tr.dataset.rikishiName);
-    });
-  } catch(e) {
-    el.classList.remove('table-loading');
-    el.textContent = 'Failed to load: ' + e.message;
-  }
-}
-
-function setKimariteDetailSort(mode, btn) {
-  kimariteDetailSort = mode;
-  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  fetchAndRenderKimariteWrestlers();
-}
-
-function closeKimariteDetail() {
-  document.getElementById('kimarite-detail').style.display = 'none';
-  closeKimariteWrestlerDetail();
-}
-
-// Second-level drill-down: pick a wrestler from the top-50 list and show
-// their own full technique mix (across ALL their career wins) as a pie chart.
-async function showKimariteWrestlerDetail(rikishiId, rikishiName) {
-  currentWrestlerId = rikishiId;
-  const panel = document.getElementById('kimarite-wrestler-detail');
-  document.getElementById('kimarite-wrestler-title').textContent = rikishiName;
-  document.getElementById('kimarite-wrestler-subtitle').textContent = 'Loading technique mix…';
-  document.getElementById('kimarite-wrestler-kvs').innerHTML = '';
-  panel.style.display = '';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  try {
-    const [rows, kvsRows] = await Promise.all([
-      sbSelect(`kimarite_by_wrestler?rikishi_id=eq.${rikishiId}&select=kimarite,uses,pct_of_wins,total_wins&order=uses.desc&limit=50`),
-      sbSelect(`kimarite_variety_score?rikishi_id=eq.${rikishiId}&select=kvs&limit=1`),
-    ]);
-    if (!rows.length) {
-      document.getElementById('kimarite-wrestler-subtitle').textContent = 'No technique data found.';
-      return;
-    }
-
-    const totalWins = rows[0].total_wins;
-    document.getElementById('kimarite-wrestler-subtitle').textContent =
-      `${totalWins.toLocaleString()} career wins, by technique`;
-
-    // Kimarite Variety Score: sum of how far ABOVE the population average
-    // this wrestler sits on each technique (never negative per-technique),
-    // excluding fusen/yorikiri/oshidashi and the non-technique fall/step-out
-    // outcomes. A wrestler with no qualifying wins has no row at all.
-    const kvs = kvsRows.length ? kvsRows[0].kvs : 0;
-    document.getElementById('kimarite-wrestler-kvs').innerHTML = `
-      <div style="display:inline-flex;align-items:baseline;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 16px">
-        <span style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Kimarite Variety Score</span>
-        <span style="color:var(--accent);font-weight:600;font-size:18px;font-family:'DM Mono',monospace">${kvs}</span>
-      </div>`;
-
-    // Group the long tail beyond the top 7 into "Other" so the pie stays readable.
-    const TOP_N = 7;
-    let slices = rows.slice(0, TOP_N).map(r => ({ label: r.kimarite, value: r.pct_of_wins }));
-    if (rows.length > TOP_N) {
-      const otherPct = rows.slice(TOP_N).reduce((sum, r) => sum + r.pct_of_wins, 0);
-      if (otherPct > 0) slices.push({ label: 'Other', value: Math.round(otherPct * 10) / 10 });
-    }
-
-    const ctx = document.getElementById('kimarite-wrestler-pie').getContext('2d');
-    if (kimariteWrestlerChart) { kimariteWrestlerChart.destroy(); kimariteWrestlerChart = null; }
-    kimariteWrestlerChart = new Chart(ctx, {
-      type: 'pie',
-      data: {
-        labels: slices.map(s => s.label),
-        datasets: [{
-          data: slices.map(s => s.value),
-          backgroundColor: slices.map((_, i) => seriesColor(i, slices.length)),
-          borderColor: '#12100c',
-          borderWidth: 2,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-            labels: { color: '#c9c2b4', font: { family: "'DM Mono', monospace", size: 11 } },
-          },
-          tooltip: {
-            callbacks: { label: (item) => `${item.label}: ${item.parsed}%` },
-          },
-        },
-      },
-    });
-  } catch(e) {
-    document.getElementById('kimarite-wrestler-subtitle').textContent = 'Failed to load: ' + e.message;
-  }
-}
-
-function closeKimariteWrestlerDetail() {
-  const panel = document.getElementById('kimarite-wrestler-detail');
-  if (panel) panel.style.display = 'none';
-  if (kimariteWrestlerChart) { kimariteWrestlerChart.destroy(); kimariteWrestlerChart = null; }
-}
-
-// ─── Direct rikishi search on the Kimarite page ───────
-// Skips the "pick a kimarite first" path entirely — search a name, jump
-// straight to their technique-mix panel. Uses the full rikishiList (unlike
-// the chart's own search box, this one does NOT exclude wrestlers already
-// on the chart — looking up their kimarite stats is independent of that).
-function kimariteSearchRikishi(query) {
-  const q = query.toLowerCase().trim();
-  const pool = rikishiList;
-  if (!q) {
-    return pool.slice().sort((a, b) =>
-      a.base_name.localeCompare(b.base_name) ||
-      (b.final_year || '').localeCompare(a.final_year || '')
-    );
-  }
-  const scored = [];
-  for (const r of pool) {
-    const name = r.base_name.toLowerCase();
-    let tier;
-    if (name.startsWith(q))    tier = 0;
-    else if (name.includes(q)) tier = 1;
-    else continue;
-    scored.push({ r, tier });
-  }
-  scored.sort((a, b) =>
-    a.tier - b.tier ||
-    a.r.base_name.localeCompare(b.r.base_name) ||
-    (b.r.final_year || '').localeCompare(a.r.final_year || '')
-  );
-  return scored.map(s => s.r);
-}
-
-function onKimariteRikishiSearch(val) {
-  renderKimariteRikishiDropdown(kimariteSearchRikishi(val));
-  document.getElementById('kimarite-rikishi-dropdown').classList.add('open');
-}
-
-// Pressing Enter jumps straight to the top match's technique-mix panel.
-function onKimariteRikishiSearchKey(e) {
-  if (e.key !== 'Enter') return;
-  e.preventDefault();
-  const val = document.getElementById('kimarite-rikishi-search').value;
-  const matches = kimariteSearchRikishi(val);
-  if (matches.length) selectKimariteRikishi(matches[0].id, matches[0].base_name);
-}
-
-function renderKimariteRikishiDropdown(list) {
-  const dd = document.getElementById('kimarite-rikishi-dropdown');
-  if (!list.length) {
-    dd.innerHTML = '<div class="dropdown-item" style="color:var(--muted)">No results</div>';
-    return;
-  }
-  dd.innerHTML = list.slice(0, 50).map(r => {
-    const yr = r.final_year ? `<span class="rank-badge">${r.final_year}</span>` : '';
-    return `<div class="dropdown-item" data-id="${escAttr(r.id)}" data-name="${escAttr(r.base_name)}">
-      ${r.base_name}${yr}
-    </div>`;
-  }).join('');
-  dd.querySelectorAll('div[data-id]').forEach(item => {
-    item.onclick = () => selectKimariteRikishi(item.dataset.id, item.dataset.name);
-  });
-}
-
-function showKimariteRikishiDropdown() {
-  renderKimariteRikishiDropdown(kimariteSearchRikishi(document.getElementById('kimarite-rikishi-search').value));
-  document.getElementById('kimarite-rikishi-dropdown').classList.add('open');
-}
-
-function selectKimariteRikishi(id, name) {
-  document.getElementById('kimarite-rikishi-search').value = '';
-  document.getElementById('kimarite-rikishi-dropdown').classList.remove('open');
-  showKimariteWrestlerDetail(id, name);
-}
-
-document.addEventListener('click', e => {
-  const dd = document.getElementById('kimarite-rikishi-dropdown');
-  if (dd && !e.target.closest('#kimarite-rikishi-search') && !e.target.closest('#kimarite-rikishi-dropdown')) {
-    dd.classList.remove('open');
-  }
-});
-
-// Add the currently-open wrestler's series to the Chart page and jump there.
-// Switch pages FIRST so the chart canvas is visible before Chart.js draws to
-// it — drawing into a display:none canvas can leave it mis-sized.
-function addKimariteWrestlerToChart() {
-  if (!currentWrestlerId) return;
-  switchPage('chart');
-  addRikishi(currentWrestlerId);
-}
-
 // ─── Leaderboard ───────────────────────────────────────
+let leaderboardActiveOnly = false;   // false = All-Time, true = Currently Active
+
 async function loadLeaderboard() {
+  leaderboardLoaded = true;
+  await fetchAndRenderLeaderboard();
+}
+
+function setLeaderboardActive(activeOnly, btn) {
+  leaderboardActiveOnly = activeOnly;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  fetchAndRenderLeaderboard();
+}
+
+async function fetchAndRenderLeaderboard() {
   const el = document.getElementById('leaderboard-table');
   if (demoMode) { el.textContent = 'Leaderboard requires a database connection.'; return; }
-  leaderboardLoaded = true;
+  el.classList.add('table-loading');
+  el.textContent = 'Loading…';
 
+  const filter = leaderboardActiveOnly ? '&is_active=eq.true' : '';
   try {
     const rows = await sbSelect(
-      'leaderboard?select=rikishi_id,rikishi_name,total_elo,avg_rank,kvs,legacy_score' +
-      '&order=legacy_score.desc&limit=100'
+      `leaderboard?select=rikishi_id,rikishi_name,total_elo${filter}&order=total_elo.desc&limit=100`
     );
     const cols = [
       { key: '__idx', label: '#', cls: 'rank-num' },
       { key: 'rikishi_name', label: 'Rikishi', cls: 'name-cell' },
       { key: 'total_elo', label: 'Total Elo', cls: 'rating-cell', fmt: v => Number(v).toLocaleString() },
-      { key: 'avg_rank', label: 'Average Rank', cls: 'muted-cell', fmt: v => Number(v).toFixed(2) },
-      { key: 'kvs', label: 'Kimarite Variety Score', cls: 'muted-cell', fmt: v => Number(v).toFixed(1) },
-      { key: 'legacy_score', label: 'Legacy Score', cls: 'rating-cell', fmt: v => Number(v).toLocaleString() },
     ];
     renderTable('leaderboard-table', rows, cols);
   } catch(e) {
+    el.classList.remove('table-loading');
     el.textContent = 'Failed to load: ' + e.message;
   }
 }

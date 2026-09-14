@@ -404,6 +404,12 @@
     body.show-leaderboard main { display: none; }
     body.show-leaderboard .config-bar .preset-buttons { display: none; }
 
+    /* Kimarite Performance page */
+    #kimperf-page { display: none; }
+    body.show-kimperf #kimperf-page { display: block; }
+    body.show-kimperf main { display: none; }
+    body.show-kimperf .config-bar .preset-buttons { display: none; }
+
     .tables-wrap {
       padding: 24px 32px;
       max-width: 1100px;
@@ -526,6 +532,7 @@
     <button class="page-tab active" id="tab-chart"       onclick="switchPage('chart')">Chart</button>
     <button class="page-tab"        id="tab-tables"      onclick="switchPage('tables')">Tables</button>
     <button class="page-tab"        id="tab-leaderboard" onclick="switchPage('leaderboard')">Leaderboard</button>
+    <button class="page-tab"        id="tab-kimperf"     onclick="switchPage('kimperf')">Kimarite Performance</button>
   </nav>
 </header>
 
@@ -670,6 +677,29 @@
     <h2 style="margin-top:0">Leaderboard</h2>
     <div class="subtitle">Top 100 rikishi by Total Elo — summed era-adjusted rating across every basho at Makushita rank or higher, over the last 18 basho (~3 years)</div>
     <div id="leaderboard-table" class="table-loading">Loading…</div>
+  </div>
+</div>
+
+<div id="kimperf-page">
+  <div class="tables-wrap">
+    <h2 style="margin-top:0">Kimarite Performance</h2>
+    <div class="subtitle">Peak era-adjusted rating vs. fighting style — pushing/thrusting techniques on the left, belt/grappling techniques on the right. Wrestlers with fewer than 20 career wins are excluded to avoid noisy outliers.</div>
+
+    <div style="display:flex;gap:20px;align-items:center;margin:16px 0;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+        <span style="width:10px;height:10px;border-radius:50%;background:#d62828;display:inline-block"></span> Pusher
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+        <span style="width:10px;height:10px;border-radius:50%;background:#4a7eca;display:inline-block"></span> Belt Fighter
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+        <span style="width:10px;height:10px;border-radius:50%;background:#888888;display:inline-block"></span> Balanced
+      </span>
+    </div>
+
+    <div class="chart-container" style="height:600px;position:relative">
+      <canvas id="kimperf-scatter"></canvas>
+    </div>
   </div>
 </div>
 
@@ -907,8 +937,8 @@ function generateDemoData() {
 
 // ─── Supabase Connection ──────────────────────────────
 // Credentials are hardcoded — replace with your own values.
-const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs'
+const SB_URL   = 'https://your-project.supabase.co';   // ← your Supabase URL
+const SB_KEY   = 'your-anon-key-here';                 // ← your anon key
 const SB_TABLE = 'results_1970';                       // ← view name (1970+ only, matches what the chart can actually plot)
 
 let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
@@ -1712,6 +1742,7 @@ function updateChart() {
 // ─── Tables page ──────────────────────────────────────
 let tablesLoaded = false;
 let leaderboardLoaded = false;
+let kimperfLoaded = false;
 let tableData = {};   // cached rows per table, incl. rikishi_id
 
 // Switch which table section is visible
@@ -1730,10 +1761,13 @@ function switchPage(page) {
   document.getElementById('tab-chart').classList.toggle('active', page === 'chart');
   document.getElementById('tab-tables').classList.toggle('active', page === 'tables');
   document.getElementById('tab-leaderboard').classList.toggle('active', page === 'leaderboard');
+  document.getElementById('tab-kimperf').classList.toggle('active', page === 'kimperf');
   document.body.classList.toggle('show-tables', page === 'tables');
   document.body.classList.toggle('show-leaderboard', page === 'leaderboard');
+  document.body.classList.toggle('show-kimperf', page === 'kimperf');
   if (page === 'tables' && !tablesLoaded) loadTables();
   if (page === 'leaderboard' && !leaderboardLoaded) loadLeaderboard();
+  if (page === 'kimperf' && !kimperfLoaded) loadKimperf();
 }
 
 async function sbSelect(path) {
@@ -2002,6 +2036,99 @@ async function loadLeaderboard() {
   } catch(e) {
     el.classList.remove('table-loading');
     el.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+// ─── Kimarite Performance ──────────────────────────────
+let kimperfChart = null;
+
+async function loadKimperf() {
+  kimperfLoaded = true;
+  const container = document.querySelector('#kimperf-page .chart-container');
+  if (demoMode) {
+    if (container) container.innerHTML = '<p class="subtitle">Kimarite Performance requires a database connection.</p>';
+    return;
+  }
+
+  try {
+    // Paginate past Supabase's 1000-row cap.
+    let rows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const to = from + pageSize - 1;
+      const resp = await fetch(
+        `${sbUrl}/rest/v1/kimarite_bias?select=rikishi_name,bias_score,peak_elo,category,pushing_bias_pct,belt_bias_pct&order=rikishi_id`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
+                     Range: `${from}-${to}`, 'Range-Unit': 'items' } }
+      );
+      if (!resp.ok) throw new Error(`${resp.status}`);
+      const page = await resp.json();
+      if (!page.length) break;
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      from += pageSize;
+    }
+
+    const byCategory = { 'Pusher': [], 'Belt Fighter': [], 'Balanced': [] };
+    rows.forEach(r => {
+      const bucket = byCategory[r.category] || byCategory['Balanced'];
+      bucket.push({
+        x: r.bias_score, y: r.peak_elo, name: r.rikishi_name,
+        push: r.pushing_bias_pct, belt: r.belt_bias_pct,
+      });
+    });
+
+    const ctx = document.getElementById('kimperf-scatter').getContext('2d');
+    if (kimperfChart) { kimperfChart.destroy(); kimperfChart = null; }
+    kimperfChart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          { label: 'Pusher',       data: byCategory['Pusher'],       backgroundColor: '#d62828' },
+          { label: 'Belt Fighter', data: byCategory['Belt Fighter'], backgroundColor: '#4a7eca' },
+          { label: 'Balanced',     data: byCategory['Balanced'],     backgroundColor: '#888888' },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            min: -100, max: 100,
+            title: {
+              display: true, text: '← Pushing Bias        Belt Bias →',
+              color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+            },
+            ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
+            grid: { color: '#1e1a15' },
+            border: { color: '#2e2820' },
+          },
+          y: {
+            title: {
+              display: true, text: 'Peak Elo (era-adjusted)',
+              color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+            },
+            ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
+            grid: { color: '#1e1a15' },
+            border: { color: '#2e2820' },
+          },
+        },
+        plugins: {
+          legend: { display: false },   // custom legend already shown above the chart
+          tooltip: {
+            callbacks: {
+              label: (item) => {
+                const p = item.raw;
+                return [p.name, `Peak Elo: ${Math.round(p.y)}`, `Pushing: ${p.push}%  Belt: ${p.belt}%`];
+              },
+            },
+          },
+        },
+      },
+    });
+  } catch(e) {
+    if (container) container.innerHTML = `<p class="subtitle">Failed to load: ${e.message}</p>`;
   }
 }
 

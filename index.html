@@ -685,6 +685,14 @@
     <h2 style="margin-top:0">Kimarite Performance</h2>
     <div class="subtitle">Peak era-adjusted rating vs. fighting style — pushing/thrusting techniques on the left, belt/grappling techniques on the right. Wrestlers with fewer than 20 career wins are excluded to avoid noisy outliers.</div>
 
+    <div class="table-scale" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+      <span class="scale-label" style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">Show:</span>
+      <div class="toggle-group" id="kimperf-active-toggle" style="display:inline-flex;width:auto">
+        <button class="active" onclick="setKimperfActive(false, this)">All</button>
+        <button onclick="setKimperfActive(true, this)">Currently Active</button>
+      </div>
+    </div>
+
     <div style="display:flex;gap:20px;align-items:center;margin:16px 0;flex-wrap:wrap">
       <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
         <span style="width:10px;height:10px;border-radius:50%;background:#d62828;display:inline-block"></span> Pusher
@@ -938,7 +946,7 @@ function generateDemoData() {
 // ─── Supabase Connection ──────────────────────────────
 // Credentials are hardcoded — replace with your own values.
 const SB_URL   = 'https://xlndeafjteiejxtwkwhd.supabase.co';   // ← your Supabase URL
-const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs';
+const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbmRlYWZqdGVpZWp4dHdrd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDY4NjgsImV4cCI6MjA5NTYyMjg2OH0.cOGHMShPVvRg1kQa8-zxfHSnge8sUZLcLNYUGkHqcvs'; 
 const SB_TABLE = 'results_1970';                       // ← view name (1970+ only, matches what the chart can actually plot)
 
 let sbUrl = SB_URL, sbKey = SB_KEY, sbTable = SB_TABLE;
@@ -2041,6 +2049,8 @@ async function loadLeaderboard() {
 
 // ─── Kimarite Performance ──────────────────────────────
 let kimperfChart = null;
+let kimperfRows = [];          // all fetched rows, cached so the toggle re-filters without a refetch
+let kimperfActiveOnly = false;
 
 async function loadKimperf() {
   kimperfLoaded = true;
@@ -2058,7 +2068,7 @@ async function loadKimperf() {
     while (true) {
       const to = from + pageSize - 1;
       const resp = await fetch(
-        `${sbUrl}/rest/v1/kimarite_bias?select=rikishi_name,bias_score,peak_elo,category,pushing_bias_pct,belt_bias_pct&order=rikishi_id`,
+        `${sbUrl}/rest/v1/kimarite_bias?select=rikishi_name,bias_score,peak_elo,category,pushing_bias_pct,belt_bias_pct,is_active&order=rikishi_id`,
         { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`,
                      Range: `${from}-${to}`, 'Range-Unit': 'items' } }
       );
@@ -2069,67 +2079,81 @@ async function loadKimperf() {
       if (page.length < pageSize) break;
       from += pageSize;
     }
-
-    const byCategory = { 'Pusher': [], 'Belt Fighter': [], 'Balanced': [] };
-    rows.forEach(r => {
-      const bucket = byCategory[r.category] || byCategory['Balanced'];
-      bucket.push({
-        x: r.bias_score, y: r.peak_elo, name: r.rikishi_name,
-        push: r.pushing_bias_pct, belt: r.belt_bias_pct,
-      });
-    });
-
-    const ctx = document.getElementById('kimperf-scatter').getContext('2d');
-    if (kimperfChart) { kimperfChart.destroy(); kimperfChart = null; }
-    kimperfChart = new Chart(ctx, {
-      type: 'scatter',
-      data: {
-        datasets: [
-          { label: 'Pusher',       data: byCategory['Pusher'],       backgroundColor: '#d62828' },
-          { label: 'Belt Fighter', data: byCategory['Belt Fighter'], backgroundColor: '#4a7eca' },
-          { label: 'Balanced',     data: byCategory['Balanced'],     backgroundColor: '#888888' },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: {
-            min: -100, max: 100,
-            title: {
-              display: true, text: '← Pushing Bias        Belt Bias →',
-              color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
-            },
-            ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
-            grid: { color: '#1e1a15' },
-            border: { color: '#2e2820' },
-          },
-          y: {
-            title: {
-              display: true, text: 'Peak Elo (era-adjusted)',
-              color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
-            },
-            ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
-            grid: { color: '#1e1a15' },
-            border: { color: '#2e2820' },
-          },
-        },
-        plugins: {
-          legend: { display: false },   // custom legend already shown above the chart
-          tooltip: {
-            callbacks: {
-              label: (item) => {
-                const p = item.raw;
-                return [p.name, `Peak Elo: ${Math.round(p.y)}`, `Pushing: ${p.push}%  Belt: ${p.belt}%`];
-              },
-            },
-          },
-        },
-      },
-    });
+    kimperfRows = rows;
+    renderKimperfChart();
   } catch(e) {
     if (container) container.innerHTML = `<p class="subtitle">Failed to load: ${e.message}</p>`;
   }
+}
+
+// Toggling doesn't refetch — all rows are already cached client-side.
+function setKimperfActive(activeOnly, btn) {
+  kimperfActiveOnly = activeOnly;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderKimperfChart();
+}
+
+function renderKimperfChart() {
+  const rows = kimperfActiveOnly ? kimperfRows.filter(r => r.is_active) : kimperfRows;
+
+  const byCategory = { 'Pusher': [], 'Belt Fighter': [], 'Balanced': [] };
+  rows.forEach(r => {
+    const bucket = byCategory[r.category] || byCategory['Balanced'];
+    bucket.push({
+      x: r.bias_score, y: r.peak_elo, name: r.rikishi_name,
+      push: r.pushing_bias_pct, belt: r.belt_bias_pct,
+    });
+  });
+
+  const ctx = document.getElementById('kimperf-scatter').getContext('2d');
+  if (kimperfChart) { kimperfChart.destroy(); kimperfChart = null; }
+  kimperfChart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Pusher',       data: byCategory['Pusher'],       backgroundColor: '#d62828' },
+        { label: 'Belt Fighter', data: byCategory['Belt Fighter'], backgroundColor: '#4a7eca' },
+        { label: 'Balanced',     data: byCategory['Balanced'],     backgroundColor: '#888888' },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          min: -100, max: 100,
+          title: {
+            display: true, text: '← Pushing Bias        Belt Bias →',
+            color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+          },
+          ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
+          grid: { color: '#1e1a15' },
+          border: { color: '#2e2820' },
+        },
+        y: {
+          title: {
+            display: true, text: 'Peak Elo (era-adjusted)',
+            color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+          },
+          ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
+          grid: { color: '#1e1a15' },
+          border: { color: '#2e2820' },
+        },
+      },
+      plugins: {
+        legend: { display: false },   // custom legend already shown above the chart
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const p = item.raw;
+              return [p.name, `Peak Elo: ${Math.round(p.y)}`, `Pushing: ${p.push}%  Belt: ${p.belt}%`];
+            },
+          },
+        },
+      },
+    },
+  });
 }
 
 // Load the top 10 rikishi from a given table onto the Chart page (rating view).

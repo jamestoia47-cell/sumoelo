@@ -708,6 +708,12 @@
     <div class="chart-container" style="height:600px;position:relative">
       <canvas id="kimperf-scatter"></canvas>
     </div>
+
+    <h3 style="color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;margin:32px 0 4px;border-top:1px solid var(--border);padding-top:24px">Style Over Time</h3>
+    <div class="subtitle" style="margin-bottom:16px">Of every win recorded in each 5-year window (full 1958+ history), what share was pushing vs. belt technique — a population-level trend, not an average of individual wrestlers' scores.</div>
+    <div class="chart-container" style="height:320px;position:relative">
+      <canvas id="kimperf-era-line"></canvas>
+    </div>
   </div>
 </div>
 
@@ -2083,6 +2089,19 @@ async function loadKimperf() {
     renderKimperfChart();
   } catch(e) {
     if (container) container.innerHTML = `<p class="subtitle">Failed to load: ${e.message}</p>`;
+    return;
+  }
+
+  // Era trend line — small dataset (a dozen 5-year windows), separate
+  // try/catch so a failure here doesn't take down the scatter above it.
+  try {
+    const eraRows = await sbSelect(
+      'kimarite_bias_by_era?select=window_label,bias_score&order=window_start'
+    );
+    renderKimperfEraChart(eraRows);
+  } catch(e) {
+    const eraContainer = document.querySelectorAll('#kimperf-page .chart-container')[1];
+    if (eraContainer) eraContainer.innerHTML = `<p class="subtitle">Failed to load: ${e.message}</p>`;
   }
 }
 
@@ -2149,6 +2168,61 @@ function renderKimperfChart() {
               const p = item.raw;
               return [p.name, `Peak Elo: ${Math.round(p.y)}`, `Pushing: ${p.push}%  Belt: ${p.belt}%`];
             },
+          },
+        },
+      },
+    },
+  });
+}
+
+// Line chart of the population-level Bias Score by 5-year window — a single
+// number per era (Belt% − Pushing%, across ALL wins recorded in that
+// window), showing whether the prevailing style has shifted over time.
+let kimperfEraChart = null;
+function renderKimperfEraChart(rows) {
+  const ctx = document.getElementById('kimperf-era-line').getContext('2d');
+  if (kimperfEraChart) { kimperfEraChart.destroy(); kimperfEraChart = null; }
+  kimperfEraChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.window_label),
+      datasets: [{
+        label: 'Bias Score',
+        data: rows.map(r => r.bias_score),
+        borderColor: '#e8c84a',
+        backgroundColor: '#e8c84a',
+        tension: 0.2,
+        pointRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: {
+            display: true, text: '5-Year Window',
+            color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+          },
+          ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 10 } },
+          grid: { color: '#1e1a15' },
+          border: { color: '#2e2820' },
+        },
+        y: {
+          title: {
+            display: true, text: '← Pushing        Belt →',
+            color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 },
+          },
+          ticks: { color: '#7a7060', font: { family: "'DM Mono', monospace", size: 11 } },
+          grid: { color: '#1e1a15' },
+          border: { color: '#2e2820' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => `Bias Score: ${item.parsed.y}`,
           },
         },
       },
